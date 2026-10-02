@@ -17,3 +17,6 @@ apps/worker/kb_session/*.session
 *.tsbuildinfo
 .history/
 sow/
+
+packages/db/prisma/*.db
+packages/db/prisma/*.db-journal

@@ -41,7 +41,7 @@ npm run build:server
 VITE_API_URL= npm run build -w @exchange/miniapp
 
 DATABASE_URL="file:${APP_ROOT}/data/prod.db" npx prisma db push \
-  --schema=packages/db/prisma/schema.prisma --skip-generate --accept-data-loss=false
+  --schema=packages/db/prisma/schema.prisma --skip-generate
 
 # Nginx — only this vhost file
 cp -f "$APP_ROOT/deploy/nginx.exchange.arix.vu.conf" /etc/nginx/sites-available/exchange.arix.vu
