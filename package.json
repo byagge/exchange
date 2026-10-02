@@ -1,0 +1,27 @@
+{
+  "name": "exchange",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Telegram crypto exchange — bot + mini app + admin",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:api": "npm run start:dev -w @exchange/api",
+    "dev:bot": "npm run dev -w @exchange/bot",
+    "dev:miniapp": "npm run dev -w @exchange/miniapp",
+    "dev:admin": "npm run dev -w @exchange/admin",
+    "dev:worker": "npm run dev -w @exchange/worker",
+    "build": "npm run build -w @exchange/shared && npm run build -w @exchange/db && npm run build -w @exchange/api && npm run build -w @exchange/bot && npm run build -w @exchange/miniapp",
+    "build:server": "npm run build -w @exchange/shared && npm run build -w @exchange/db && npm run build -w @exchange/api && npm run build -w @exchange/bot",
+    "db:generate": "npm run generate -w @exchange/db",
+    "db:migrate": "npm run migrate -w @exchange/db",
+    "db:push": "npm run push -w @exchange/db",
+    "db:seed": "npm run seed -w @exchange/db",
+    "smoke": "node scripts/smoke.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

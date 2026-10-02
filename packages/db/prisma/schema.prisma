@@ -1,0 +1,326 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum UserStatus {
+  active
+  banned
+  frozen
+}
+
+enum Network {
+  TON
+  TRC20
+}
+
+enum DepositSource {
+  onchain
+  cryptobot
+}
+
+enum DepositStatus {
+  pending
+  confirming
+  credited
+  failed
+  expired
+}
+
+enum OrderStatus {
+  draft
+  awaiting_funds
+  locked
+  processing
+  awaiting_payout
+  completed
+  cancelled
+  failed
+}
+
+enum WithdrawalMethod {
+  cryptobot
+  onchain
+  fiat
+}
+
+enum WithdrawalStatus {
+  pending
+  processing
+  completed
+  failed
+  cancelled
+}
+
+enum LedgerKind {
+  available
+  locked
+  referral
+}
+
+enum SweepStatus {
+  pending
+  processing
+  completed
+  failed
+}
+
+enum AdminRole {
+  superadmin
+  operator
+  viewer
+}
+
+model User {
+  id              String     @id @default(cuid())
+  telegramId      BigInt     @unique
+  username        String?
+  firstName       String?
+  lastName        String?
+  languageCode    String?
+  photoUrl        String?
+  status          UserStatus @default(active)
+  notes           String?
+  referralCode    String     @unique
+  referredById    String?
+  referredBy      User?      @relation("Referrals", fields: [referredById], references: [id])
+  referrals       User[]     @relation("Referrals")
+  loyaltyVolume   BigInt     @default(0)
+  tradeCount      Int        @default(0)
+  rubTurnover     BigInt     @default(0)
+  minDepositUsdt  Float?
+  maxWithdrawUsdt Float?
+  minWithdrawUsdt Float?
+  withdrawFrozen  Boolean    @default(false)
+  isAdmin         Boolean    @default(false)
+  /** Принял правила бота (/start) */
+  rulesAcceptedAt DateTime?
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  wallets       WalletAddress[]
+  ledger        LedgerAccount[]
+  deposits      Deposit[]
+  orders        ExchangeOrder[]
+  withdrawals   Withdrawal[]
+  referralEarns ReferralEarning[] @relation("Earner")
+  referralFrom  ReferralEarning[] @relation("Source")
+
+  @@index([status])
+  @@index([createdAt])
+}
+
+model WalletAddress {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id])
+  network       Network
+  address       String
+  derivationIdx Int
+  privateKeyEnc String
+  lastScannedAt DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  deposits Deposit[]
+  sweeps   SweepJob[]
+
+  @@unique([userId, network])
+  @@unique([network, address])
+  @@index([network, address])
+}
+
+model LedgerAccount {
+  id        String     @id @default(cuid())
+  userId    String
+  user      User       @relation(fields: [userId], references: [id])
+  kind      LedgerKind
+  balance   BigInt     @default(0)
+  updatedAt DateTime   @updatedAt
+
+  entries LedgerEntry[]
+
+  @@unique([userId, kind])
+}
+
+model LedgerEntry {
+  id            String        @id @default(cuid())
+  accountId     String
+  account       LedgerAccount @relation(fields: [accountId], references: [id])
+  amount        BigInt
+  balanceAfter  BigInt
+  reason        String
+  referenceType String?
+  referenceId   String?
+  meta          Json?
+  createdAt     DateTime      @default(now())
+
+  @@index([accountId, createdAt])
+  @@index([referenceType, referenceId])
+}
+
+model Deposit {
+  id              String        @id @default(cuid())
+  userId          String
+  user            User          @relation(fields: [userId], references: [id])
+  source          DepositSource
+  status          DepositStatus @default(pending)
+  network         Network?
+  walletAddressId String?
+  walletAddress   WalletAddress? @relation(fields: [walletAddressId], references: [id])
+  amountMicros    BigInt        @default(0)
+  txHash          String?
+  checkUrl        String?
+  checkId         String?
+  confirmations   Int           @default(0)
+  error           String?
+  creditedAt      DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@unique([txHash])
+  @@unique([checkId])
+  @@index([userId, createdAt])
+  @@index([status])
+}
+
+model ExchangeOrder {
+  id              String      @id @default(cuid())
+  userId          String
+  user            User        @relation(fields: [userId], references: [id])
+  pair            String      @default("USDT_RUB")
+  status          OrderStatus @default(draft)
+  fromAmountMicros BigInt
+  toAmountKopecks BigInt
+  /** Сумма выплаты, которую оператор направил клиенту (может отличаться от расчётной) */
+  payoutAmountKopecks BigInt?
+  rate            String
+  feeMicros       BigInt      @default(0)
+  method          String      @default("fiat")
+  requisites      Json?
+  proof           String?
+  proofFiles      Json?
+  /** Видео/файлы от клиента после истечения таймера */
+  clientProofFiles Json?
+  clientProofAt   DateTime?
+  adminNote       String?
+  failReason      String?
+  /** Дедлайн выплаты: после него клиент может прикрепить видео */
+  payoutDeadline  DateTime?
+  dispatchedAt    DateTime?
+  completedAt     DateTime?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  withdrawal Withdrawal?
+
+  @@index([userId, createdAt])
+  @@index([status])
+  @@index([payoutDeadline])
+}
+
+model Withdrawal {
+  id           String           @id @default(cuid())
+  userId       String
+  user         User             @relation(fields: [userId], references: [id])
+  orderId      String?          @unique
+  order        ExchangeOrder?   @relation(fields: [orderId], references: [id])
+  method       WithdrawalMethod
+  status       WithdrawalStatus @default(pending)
+  amountMicros BigInt
+  feeMicros    BigInt           @default(0)
+  destination  String
+  network      Network?
+  txHash       String?
+  checkUrl     String?
+  error        String?
+  completedAt  DateTime?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  @@index([userId, createdAt])
+  @@index([status])
+}
+
+model SweepJob {
+  id              String      @id @default(cuid())
+  walletAddressId String
+  walletAddress   WalletAddress @relation(fields: [walletAddressId], references: [id])
+  network         Network
+  fromAddress     String
+  toMaster        String
+  amountMicros    BigInt
+  status          SweepStatus @default(pending)
+  txHash          String?
+  error           String?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  @@index([status])
+}
+
+model Settings {
+  id                   Int      @id @default(1)
+  usdtRubRate          String   @default("98.01")
+  sweepThresholdUsdt   Float    @default(50)
+  masterTonAddress     String?
+  masterTrc20Address   String?
+  minDepositUsdt       Float    @default(1)
+  minWithdrawUsdt      Float    @default(5)
+  withdrawFeeUsdt      Float    @default(0)
+  exchangeFeePercent   Float    @default(0)
+  supportUrl           String   @default("https://t.me/")
+  welcomeText          String   @default("Добро пожаловать в Exchange — быстрый и безопасный обмен.")
+  /** Текст правил при /start (до главного меню) */
+  rulesText            String   @default("Пользуясь сервисом, вы подтверждаете: обмен только USDT→RUB; соблюдать лимиты; не использовать сервис для незаконной деятельности; реквизиты указываете корректно. Средства на внутреннем балансе — учётные, вывод по правилам сервиса.")
+  maintenanceMode      Boolean  @default(false)
+  referralPercent      Float    @default(0.5)
+  /** Реквизиты платформы (справочно; обмен только USDT→RUB) */
+  fiatReceivePhone     String   @default("+79000000000")
+  fiatReceiveCard      String?
+  fiatReceiveBank      String   @default("Сбербанк")
+  fiatReceiveName      String   @default("Exchange")
+  /** Таймер выплаты по умолчанию (минуты), когда оператор направляет заявку */
+  defaultPayoutMinutes Int      @default(30)
+  updatedAt            DateTime @updatedAt
+}
+
+model AdminUser {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  passwordHash String
+  name         String?
+  role         AdminRole @default(operator)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  /// AdminUser id or Telegram User id (no FK — dual admin model)
+  adminId    String?
+  action     String
+  entityType String?
+  entityId   String?
+  meta       Json?
+  createdAt  DateTime @default(now())
+
+  @@index([createdAt])
+}
+
+model ReferralEarning {
+  id           String   @id @default(cuid())
+  earnerId     String
+  earner       User     @relation("Earner", fields: [earnerId], references: [id])
+  sourceUserId String
+  sourceUser   User     @relation("Source", fields: [sourceUserId], references: [id])
+  amountMicros BigInt
+  orderId      String?
+  createdAt    DateTime @default(now())
+
+  @@index([earnerId])
+}
