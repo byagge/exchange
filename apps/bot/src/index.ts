@@ -15,29 +15,57 @@ const pendingRef = new Map<number, string>();
 const broadcastDraft = new Map<number, string>();
 
 /**
- * Premium / custom emoji (HTML).
- * Fallback unicode always inside the tag — clients without support show it.
- * If Telegram rejects custom emoji for the bot, sendHtml() strips tags.
+ * Premium emoji pack (HTML <tg-emoji>).
+ * Fallback unicode inside the tag for clients without custom emoji.
  */
 const E = {
-  check: { id: '5206607081334906820', f: '✅' },
-  cross: { id: '5210952531676504517', f: '❌' },
-  rocket: { id: '5420315771991497307', f: '🚀' },
-  money: { id: '5375296308752336103', f: '💰' },
+  menu: { id: '5377336227533969892', f: '☰' },
+  heart: { id: '5911484439505936397', f: '❤️' },
+  folder: { id: '5911489516157280180', f: '📁' },
+  bookmark: { id: '5911251317271043972', f: '🔖' },
+  lock: { id: '5911323373937369033', f: '🔒' },
+  shield: { id: '5911379646598880549', f: '🛡' },
+  warn: { id: '5911145411967459937', f: '⚠️' },
+  ban: { id: '5911501675209694593', f: '🚫' },
+  monitor: { id: '5909217749040635755', f: '💻' },
+  info: { id: '5910994954968113783', f: 'ℹ️' },
+  megaphone: { id: '5909124470940901643', f: '📣' },
+  check: { id: '5911055144639799125', f: '✅' },
+  cart: { id: '5911362634233421746', f: '🛒' },
+  trash: { id: '5911143453462372194', f: '🗑' },
+  clock: { id: '5911276936750964150', f: '⏱' },
+  briefcase: { id: '5909275524940702226', f: '💼' },
+  search: { id: '5911028421353285215', f: '🔍' },
+  pin: { id: '5911464351943892212', f: '📌' },
+  user: { id: '5908952869817557105', f: '👤' },
+  users: { id: '5908795012589560198', f: '👥' },
+  wallet: { id: '5908947788871246223', f: '👛' },
+  at: { id: '5911352098678644390', f: '@' },
+  crown: { id: '5911453258043368257', f: '👑' },
+  link: { id: '5909164332532376529', f: '🔗' },
+  gift: { id: '5911358979216251585', f: '🎁' },
+  chart: { id: '591110355751159614', f: '📈' },
+  home: { id: '5908975658914030178', f: '🏠' },
+  robot: { id: '5911350127288655523', f: '🤖' },
+  star: { id: '5911080141349461495', f: '⭐' },
+  layers: { id: '5911230542514233531', f: '📚' },
+  arrow: { id: '5909164014704796217', f: '↗️' },
+  down: { id: '5911001882750360915', f: '⬇️' },
+  flask: { id: '5910995388759811013', f: '🧪' },
+  bell: { id: '5911258945132962452', f: '🔔' },
+  ton: { id: '5911239046549478950', f: '💎' },
+  usdt: { id: '5911473113677176791', f: '₮' },
+  swap: { id: '5909224668232952203', f: '💱' },
+  tron: { id: '5911054161092288272', f: '🔴' },
+  ok: { id: '5911473599008480053', f: '✅' },
+  question: { id: '5911175201860625958', f: '❓' },
+  dollar: { id: '5910984870384902405', f: '$' },
+  ruble: { id: '5911388322432820088', f: '₽' },
+  cross: { id: '5911501675209694593', f: '❌' },
   support: { id: '5377650268987465369', f: '🆘' },
-  shield: { id: '5231200819986047251', f: '🛡' },
-  fire: { id: '5260293721622489940', f: '🔥' },
-  star: { id: '5312536423388701701', f: '⭐' },
-  wave: { id: '5199740266093539511', f: '👋' },
-  doc: { id: '5438496463044752972', f: '📄' },
-  lock: { id: '5312241691446050903', f: '🔒' },
-  wallet: { id: '5373012449597335010', f: '💼' },
-  megaphone: { id: '5287690725441733097', f: '📣' },
-  clock: { id: '5307751747479206039', f: '⏳' },
-  warn: { id: '5447644880824197468', f: '⚠️' },
-  spark: { id: '5452066204812941472', f: '✨' },
-  point: { id: '5413700062947247593', f: '👇' },
-  link: { id: '5271604874410266319', f: '🔗' },
+  wave: { id: '5911484439505936397', f: '👋' },
+  doc: { id: '5911245291431929370', f: '📄' },
+  back: { id: '5911001882750360915', f: '⬅️' },
 } as const;
 
 type EKey = keyof typeof E;
@@ -98,6 +126,28 @@ function isAdminTg(ctx: Context) {
   const id = ctx.from?.id?.toString();
   return !!id && adminIds().has(id);
 }
+
+function moneyUsd(micros: number | bigint) {
+  const n = Number(micros) / 1e6;
+  return n.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function moneyRub(kopecks: number | bigint) {
+  const n = Number(kopecks) / 100;
+  return n.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+const ORDER_STATUS: Record<string, string> = {
+  draft: 'Черновик',
+  awaiting_funds: 'Ожидает средств',
+  locked: 'Заблокирована',
+  processing: 'В обработке',
+  awaiting_payout: 'Ожидает выплаты',
+  completed: 'Завершена',
+  cancelled: 'Отменена',
+  failed: 'Ошибка',
+  disputed: 'Спор',
+};
 
 async function settings() {
   try {
@@ -167,41 +217,211 @@ function rulesKeyboard() {
   return new InlineKeyboard().text(`${E.check.f} Принимаю правила`, 'rules:accept');
 }
 
-function openAppButton(kb: InlineKeyboard, label = `${E.rocket.f} Открыть Exchange`) {
-  kb.webApp(label, webappUrl);
-  return kb;
+/** Blue primary WebApp button */
+function openAppInlineRow(): Record<string, unknown>[] {
+  return [
+    {
+      text: `${E.monitor.f} Открыть приложение`,
+      web_app: { url: webappUrl },
+      style: 'primary',
+      icon_custom_emoji_id: E.monitor.id,
+    },
+  ];
 }
 
 function mainMenuKeyboard(admin: boolean) {
-  const kb = new InlineKeyboard();
-  openAppButton(kb);
-  kb.row()
-    .text(`${E.money.f} Баланс`, 'menu:balance')
-    .text(`${E.support.f} Поддержка`, 'menu:support');
+  const rows: Record<string, unknown>[][] = [
+    openAppInlineRow(),
+    [
+      { text: `${E.user.f} Профиль`, callback_data: 'menu:profile', icon_custom_emoji_id: E.user.id },
+      {
+        text: `${E.support.f} Поддержка`,
+        callback_data: 'menu:support',
+        icon_custom_emoji_id: E.support.id,
+      },
+    ],
+  ];
   if (admin) {
-    kb.row().text(`${E.megaphone.f} Админ · рассылка`, 'admin:broadcast');
+    rows.push([
+      {
+        text: `${E.megaphone.f} Админ · рассылка`,
+        callback_data: 'admin:broadcast',
+        icon_custom_emoji_id: E.megaphone.id,
+      },
+    ]);
   }
+  const kb = new InlineKeyboard();
+  (kb as any).inline_keyboard = rows;
   return kb;
 }
 
 function replyMenuKeyboard(admin: boolean) {
-  const kb = new Keyboard()
-    .webApp(`${E.rocket.f} Открыть приложение`, webappUrl)
-    .text(`${E.money.f} Баланс`)
-    .row()
-    .text(`${E.support.f} Поддержка`);
-  if (admin) kb.row().text(`${E.megaphone.f} Рассылка`);
+  const rows: Record<string, unknown>[][] = [
+    [
+      {
+        text: `${E.monitor.f} Открыть приложение`,
+        web_app: { url: webappUrl },
+        icon_custom_emoji_id: E.monitor.id,
+      },
+    ],
+    [
+      { text: `${E.user.f} Профиль`, icon_custom_emoji_id: E.user.id },
+      { text: `${E.support.f} Поддержка`, icon_custom_emoji_id: E.support.id },
+    ],
+  ];
+  if (admin) {
+    rows.push([{ text: `${E.megaphone.f} Рассылка`, icon_custom_emoji_id: E.megaphone.id }]);
+  }
+  const kb = new Keyboard();
+  (kb as any).keyboard = rows;
   return kb.resized().persistent();
+}
+
+function profileActionsKeyboard() {
+  return new InlineKeyboard()
+    .text(`${E.chart.f} Курс`, 'menu:rate')
+    .text(`${E.layers.f} Заявки`, 'menu:orders');
+}
+
+async function profileText(user: {
+  id: string;
+  username: string | null;
+  firstName: string | null;
+  telegramId: bigint;
+  tradeCount: number;
+}) {
+  const [available, referral] = await Promise.all([
+    prisma.ledgerAccount.findUnique({
+      where: { userId_kind: { userId: user.id, kind: 'available' } },
+    }),
+    prisma.ledgerAccount.findUnique({
+      where: { userId_kind: { userId: user.id, kind: 'referral' } },
+    }),
+  ]);
+  const nick = user.username ? `@${user.username}` : user.firstName || '—';
+  const deals = user.tradeCount ?? 0;
+  return (
+    `${pe('question')} <b>Информация</b>\n` +
+    `├ Никнейм: ${nick}\n` +
+    `├ ID: <code>${user.telegramId.toString()}</code>\n` +
+    `╰ Кол-во сделок: ${deals}\n\n` +
+    `${pe('question')} <b>Финансы</b>\n` +
+    `├ Баланс: ${pe('dollar')} ${moneyUsd(available?.balance || 0)}\n` +
+    `╰ Реферальный баланс: ${pe('dollar')} ${moneyUsd(referral?.balance || 0)}`
+  );
+}
+
+async function showProfile(
+  ctx: Context,
+  user: {
+    id: string;
+    username: string | null;
+    firstName: string | null;
+    telegramId: bigint;
+    tradeCount: number;
+  },
+  edit = false,
+) {
+  const text = await profileText(user);
+  const markup = profileActionsKeyboard();
+  if (edit) await editHtml(ctx, text, { reply_markup: markup });
+  else await replyHtml(ctx, text, { reply_markup: markup });
+}
+
+async function showRate(ctx: Context, edit = false) {
+  const s = await settings();
+  const rate = s?.usdtRubRate || process.env.DEFAULT_USDT_RUB_RATE || '98.01';
+  const text =
+    `${pe('chart')} <b>Курс</b>\n\n` +
+    `${pe('usdt')} USDT ${pe('swap')} ${pe('ruble')} RUB\n` +
+    `1 USDT = <b>${rate}</b> ₽`;
+  const kb = new InlineKeyboard().text(`${E.back.f} Назад`, 'menu:profile');
+  if (edit) await editHtml(ctx, text, { reply_markup: kb });
+  else await replyHtml(ctx, text, { reply_markup: kb });
+}
+
+async function showOrdersList(ctx: Context, userId: string, edit = false) {
+  const orders = await prisma.exchangeOrder.findMany({
+    where: { userId },
+    orderBy: { createdAt: 'desc' },
+    take: 20,
+  });
+  const kb = new InlineKeyboard();
+  if (!orders.length) {
+    const text = `${pe('layers')} <b>Заявки</b>\n\nЗаявок пока нет.`;
+    kb.text(`${E.back.f} Назад`, 'menu:profile');
+    if (edit) await editHtml(ctx, text, { reply_markup: kb });
+    else await replyHtml(ctx, text, { reply_markup: kb });
+    return;
+  }
+  for (const o of orders) {
+    const usdt = moneyUsd(o.fromAmountMicros);
+    const st = ORDER_STATUS[o.status] || o.status;
+    const short = o.id.slice(-6).toUpperCase();
+    kb.text(`${E.swap.f} #${short} · ${usdt} · ${st}`, `order:${o.id}`).row();
+  }
+  kb.text(`${E.back.f} Назад`, 'menu:profile');
+  const text = `${pe('layers')} <b>Заявки</b>\n\nВыберите заявку:`;
+  if (edit) await editHtml(ctx, text, { reply_markup: kb });
+  else await replyHtml(ctx, text, { reply_markup: kb });
+}
+
+async function showOrderDetail(ctx: Context, orderId: string, userId: string) {
+  const order = await prisma.exchangeOrder.findFirst({
+    where: { id: orderId, userId },
+  });
+  if (!order) {
+    await editHtml(ctx, `${pe('warn')} Заявка не найдена.`, {
+      reply_markup: new InlineKeyboard().text(`${E.back.f} Назад`, 'menu:orders'),
+    });
+    return;
+  }
+  const req = (order.requisites || {}) as Record<string, unknown>;
+  const bank = req.bank ? String(req.bank) : '—';
+  const fio = req.fio ? String(req.fio) : '—';
+  const card = req.card || req.phone || req.requisite || '—';
+  const text =
+    `${pe('swap')} <b>Заявка #${order.id.slice(-6).toUpperCase()}</b>\n\n` +
+    `${pe('pin')} Статус: <b>${ORDER_STATUS[order.status] || order.status}</b>\n` +
+    `${pe('usdt')} Сумма: <b>${moneyUsd(order.fromAmountMicros)}</b> USDT\n` +
+    `${pe('ruble')} К получению: <b>${moneyRub(order.payoutAmountKopecks ?? order.toAmountKopecks)}</b> ₽\n` +
+    `${pe('chart')} Курс: <b>${order.rate}</b>\n` +
+    `${pe('briefcase')} Банк: ${bank}\n` +
+    `${pe('user')} ФИО: ${fio}\n` +
+    `${pe('at')} Реквизиты: <code>${String(card)}</code>\n` +
+    `${pe('clock')} Создана: ${order.createdAt.toLocaleString('ru-RU')}`;
+  const kb = new InlineKeyboard().text(`${E.back.f} Назад`, 'menu:orders');
+  await editHtml(ctx, text, { reply_markup: kb });
+}
+
+async function showSupport(ctx: Context) {
+  await replyHtml(
+    ctx,
+    `${pe('support')} <b>Поддержка</b>\n\n` +
+      `По всем вопросам обращайтесь к оператору.\n` +
+      `Укажите номер заявки при обращении.`,
+  );
 }
 
 async function showMainMenu(ctx: Context) {
   const s = await settings();
   const welcome = s?.welcomeText || 'Добро пожаловать в Exchange.';
   const admin = isAdminTg(ctx);
-  await replyHtml(ctx, `${pe('spark')} <b>${welcome}</b>`, {
+
+  // 1) menu emoji first + reply keyboard
+  try {
+    await ctx.reply(pe('menu'), {
+      parse_mode: 'HTML',
+      reply_markup: replyMenuKeyboard(admin),
+    });
+  } catch {
+    await ctx.reply(E.menu.f, { reply_markup: replyMenuKeyboard(admin) });
+  }
+
+  // 2) then main menu with inline buttons
+  await replyHtml(ctx, `${pe('home')} <b>${welcome}</b>`, {
     reply_markup: mainMenuKeyboard(admin),
   });
-  await ctx.reply('☰', { reply_markup: replyMenuKeyboard(admin) });
 }
 
 async function showRules(ctx: Context) {
@@ -264,28 +484,38 @@ async function main() {
     await showMainMenu(ctx);
   });
 
-  bot.callbackQuery('menu:balance', async (ctx) => {
+  bot.callbackQuery('menu:profile', async (ctx) => {
     await ctx.answerCallbackQuery();
     const user = await ensureUser(ctx);
     if (!user) return;
-    const acc = await prisma.ledgerAccount.findUnique({
-      where: { userId_kind: { userId: user.id, kind: 'available' } },
-    });
-    const usdt = (Number(acc?.balance || 0) / 1e6).toFixed(2);
-    const kb = new InlineKeyboard();
-    openAppButton(kb, `${E.wallet.f} Открыть кошелёк`);
-    await replyHtml(ctx, `${pe('money')} Доступно: <b>${usdt} USDT</b>`, {
-      reply_markup: kb,
-    });
+    const text = await profileText(user);
+    const markup = profileActionsKeyboard();
+    const edited = await editHtml(ctx, text, { reply_markup: markup });
+    if (!edited) await replyHtml(ctx, text, { reply_markup: markup });
+  });
+
+  bot.callbackQuery('menu:rate', async (ctx) => {
+    await ctx.answerCallbackQuery();
+    await showRate(ctx, true);
+  });
+
+  bot.callbackQuery('menu:orders', async (ctx) => {
+    await ctx.answerCallbackQuery();
+    const user = await ensureUser(ctx);
+    if (!user) return;
+    await showOrdersList(ctx, user.id, true);
+  });
+
+  bot.callbackQuery(/^order:(.+)$/, async (ctx) => {
+    await ctx.answerCallbackQuery();
+    const user = await ensureUser(ctx);
+    if (!user) return;
+    await showOrderDetail(ctx, ctx.match![1], user.id);
   });
 
   bot.callbackQuery('menu:support', async (ctx) => {
     await ctx.answerCallbackQuery();
-    const s = await settings();
-    await replyHtml(
-      ctx,
-      `${pe('support')} Поддержка: ${s?.supportUrl || 'https://t.me/'}`,
-    );
+    await showSupport(ctx);
   });
 
   bot.callbackQuery('admin:broadcast', async (ctx) => {
@@ -334,7 +564,7 @@ async function main() {
     await replyHtml(
       ctx,
       `${pe('check')} <b>Рассылка завершена</b>\n` +
-        `${pe('spark')} Доставлено: <b>${ok}</b>\n` +
+        `${pe('ok')} Доставлено: <b>${ok}</b>\n` +
         `${pe('warn')} Ошибок: <b>${fail}</b>`,
     );
   });
@@ -354,9 +584,9 @@ async function main() {
   });
 
   bot.command('app', async (ctx) => {
-    const kb = new InlineKeyboard();
-    openAppButton(kb);
-    await replyHtml(ctx, `${pe('rocket')} Exchange`, { reply_markup: kb });
+    await replyHtml(ctx, `${pe('monitor')} Exchange`, {
+      reply_markup: mainMenuKeyboard(isAdminTg(ctx)),
+    });
   });
 
   bot.on('message:text', async (ctx) => {
@@ -387,26 +617,17 @@ async function main() {
     }
 
     if (text.includes('Открыть приложение')) {
-      const kb = new InlineKeyboard();
-      openAppButton(kb);
-      await replyHtml(ctx, `${pe('rocket')} Exchange`, { reply_markup: kb });
+      await replyHtml(ctx, `${pe('monitor')} Exchange`, {
+        reply_markup: mainMenuKeyboard(isAdminTg(ctx)),
+      });
       return;
     }
-    if (text.includes('Баланс')) {
-      const acc = await prisma.ledgerAccount.findUnique({
-        where: { userId_kind: { userId: user.id, kind: 'available' } },
-      });
-      const usdt = (Number(acc?.balance || 0) / 1e6).toFixed(2);
-      const kb = new InlineKeyboard();
-      openAppButton(kb, `${E.wallet.f} Открыть кошелёк`);
-      await replyHtml(ctx, `${pe('money')} Доступно: <b>${usdt} USDT</b>`, {
-        reply_markup: kb,
-      });
+    if (text.includes('Профиль') || text.includes('Баланс')) {
+      await showProfile(ctx, user, false);
       return;
     }
     if (text.includes('Поддержка')) {
-      const s = await settings();
-      await replyHtml(ctx, `${pe('support')} Поддержка: ${s?.supportUrl || 'https://t.me/'}`);
+      await showSupport(ctx);
       return;
     }
     if (text.includes('Рассылка') && isAdminTg(ctx)) {
