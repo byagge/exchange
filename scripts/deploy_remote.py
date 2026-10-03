@@ -64,10 +64,16 @@ def run(ssh: paramiko.SSHClient, cmd: str, timeout: int = 600) -> tuple[int, str
     out = stdout.read().decode("utf-8", "replace")
     err = stderr.read().decode("utf-8", "replace")
     code = stdout.channel.recv_exit_status()
+
+    def safe(s: str) -> str:
+        return s.encode("ascii", "replace").decode("ascii")
+
     if out.strip():
-        print(out[-4000:] if len(out) > 4000 else out)
+        chunk = out[-4000:] if len(out) > 4000 else out
+        print(safe(chunk))
     if err.strip():
-        print(err[-2000:] if len(err) > 2000 else err)
+        chunk = err[-2000:] if len(err) > 2000 else err
+        print(safe(chunk))
     return code, out, err
 
 

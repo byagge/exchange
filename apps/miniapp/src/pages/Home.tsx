@@ -8,13 +8,24 @@ import { api, haptic } from '../lib/api';
 import { UsdtLogo } from '../components/AssetLogos';
 import { RateCalculator } from '../components/RateCalculator';
 
+function readBalanceCache() {
+  try {
+    const raw = sessionStorage.getItem('ex_balance');
+    if (!raw) return { available: 0, rate: '98.01' };
+    return JSON.parse(raw) as { available: number; rate: string };
+  } catch {
+    return { available: 0, rate: '98.01' };
+  }
+}
+
 export function HomePage() {
   const { token } = useAuth();
   const nav = useNavigate();
-  const [balance, setBalance] = useState(0);
-  const [rate, setRate] = useState('98.01');
+  const cached = readBalanceCache();
+  const [balance, setBalance] = useState(cached.available);
+  const [rate, setRate] = useState(cached.rate);
 
-  const spring = useSpring(0, { stiffness: 80, damping: 20 });
+  const spring = useSpring(cached.available, { stiffness: 120, damping: 22 });
   const display = useTransform(spring, (v) =>
     (v / 1_000_000).toLocaleString('ru-RU', {
       minimumFractionDigits: 2,
@@ -24,12 +35,18 @@ export function HomePage() {
 
   useEffect(() => {
     if (!token) return;
+    let alive = true;
     (async () => {
       const b = await api<{ available: number; rate: string }>('/api/balance', { token });
+      if (!alive) return;
       setBalance(b.available);
       setRate(b.rate);
       spring.set(b.available);
+      sessionStorage.setItem('ex_balance', JSON.stringify(b));
     })().catch(console.error);
+    return () => {
+      alive = false;
+    };
   }, [token, spring]);
 
   return (
