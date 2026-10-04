@@ -19,7 +19,7 @@ const broadcastDraft = new Map<number, string>();
  * Fallback unicode inside the tag for clients without support.
  */
 const E = {
-  menu: { id: '5377336227533969892', f: '☰' },
+  menu: { id: '5377336227533969892', f: '📱' },
   heart: { id: '5911484439505936397', f: '❤️' },
   folder: { id: '5911489516157280180', f: '📁' },
   bookmark: { id: '5911251317271043972', f: '🔖' },
@@ -280,10 +280,22 @@ async function showMainMenu(ctx: Context) {
   const welcome = s?.welcomeText || 'Добро пожаловать в Exchange.';
   const admin = isAdminTg(ctx);
 
-  // 1) Premium menu emoji + reply keyboard
-  await replyHtml(ctx, pe('menu'), {
-    reply_markup: replyMenuKeyboard(admin),
-  });
+  // 1) Premium menu emoji + reply keyboard (📱 = UTF-16 length 2)
+  try {
+    await ctx.reply(E.menu.f, {
+      entities: [
+        {
+          type: 'custom_emoji',
+          offset: 0,
+          length: 2,
+          custom_emoji_id: E.menu.id,
+        },
+      ],
+      reply_markup: replyMenuKeyboard(admin),
+    });
+  } catch {
+    await ctx.reply(E.menu.f, { reply_markup: replyMenuKeyboard(admin) });
+  }
 
   // 2) Main menu with inline buttons
   await replyHtml(ctx, `${pe('star')} <b>${welcome}</b>`, {
