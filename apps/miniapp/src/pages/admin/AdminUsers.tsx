@@ -414,6 +414,12 @@ export function AdminUsersPage() {
                       label: 'Админ',
                       value: selected.isAdmin ? 'Да' : 'Нет',
                     },
+                    { label: 'Последний IP', value: selected.lastIp || '—' },
+                    { label: 'Устройство', value: selected.lastDevice || '—' },
+                    {
+                      label: 'Был в приложении',
+                      value: selected.lastSeenAt ? new Date(selected.lastSeenAt).toLocaleString('ru-RU') : '—',
+                    },
                     { label: 'Реф. код', value: selected.referralCode },
                     {
                       label: 'Пригласил',

@@ -12,6 +12,8 @@ import { uploadsRoot } from './admin/uploads';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, { rawBody: true });
+  // За nginx: нужен реальный IP клиента (X-Forwarded-For)
+  app.set('trust proxy', 1);
   const origins = (process.env.CORS_ORIGINS || 'http://localhost:5173,http://localhost:3000')
     .split(',')
     .map((s) => s.trim());

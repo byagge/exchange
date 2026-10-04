@@ -2,6 +2,7 @@ import dotenv from 'dotenv';
 import path from 'path';
 import { Bot, InlineKeyboard, Keyboard, GrammyError, HttpError, Context } from 'grammy';
 import { prisma } from '@exchange/db';
+import { registerOrderHandlers, handlePrivateText } from './orders';
 
 dotenv.config({ path: path.resolve(__dirname, '../../../.env') });
 dotenv.config();
@@ -447,6 +448,7 @@ async function main() {
   }
 
   const bot = new Bot(token);
+  registerOrderHandlers(bot);
 
   bot.command('start', async (ctx) => {
     const payload = (ctx.match?.toString() || '').trim();
@@ -616,21 +618,22 @@ async function main() {
       return;
     }
 
-    if (text.includes('Открыть приложение')) {
+    const short = text.length <= 30;
+    if (short && text.includes('Открыть приложение')) {
       await replyHtml(ctx, `${pe('monitor')} Exchange`, {
         reply_markup: mainMenuKeyboard(isAdminTg(ctx)),
       });
       return;
     }
-    if (text.includes('Профиль') || text.includes('Баланс')) {
+    if (short && (text.includes('Профиль') || text.includes('Баланс'))) {
       await showProfile(ctx, user, false);
       return;
     }
-    if (text.includes('Поддержка')) {
+    if (short && text.includes('Поддержка')) {
       await showSupport(ctx);
       return;
     }
-    if (text.includes('Рассылка') && isAdminTg(ctx)) {
+    if (short && text.includes('Рассылка') && isAdminTg(ctx)) {
       broadcastDraft.set(ctx.from!.id, '');
       await replyHtml(
         ctx,
@@ -638,6 +641,9 @@ async function main() {
       );
       return;
     }
+
+    // Свободный текст при активной заявке → оператору в тему
+    if (await handlePrivateText(ctx, text)) return;
 
     await showMainMenu(ctx);
   });

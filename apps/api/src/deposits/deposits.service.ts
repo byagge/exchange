@@ -94,6 +94,8 @@ export class DepositsService {
     network: Network;
     txHash: string;
     amountMicros: number;
+    /** On-chain деньги уже пришли — зачисляем 1:1 даже ниже минимума */
+    ignoreMin?: boolean;
   }) {
     if (!(params.amountMicros > 0)) {
       throw new BadRequestException('Сумма должна быть больше 0');
@@ -107,7 +109,7 @@ export class DepositsService {
     if (existing) return existing;
 
     const settings = await this.prisma.settings.findUnique({ where: { id: 1 } });
-    if (settings && params.amountMicros < usdtToMicros(settings.minDepositUsdt)) {
+    if (!params.ignoreMin && settings && params.amountMicros < usdtToMicros(settings.minDepositUsdt)) {
       throw new BadRequestException(`Минимум депозита ${settings.minDepositUsdt} USDT`);
     }
 

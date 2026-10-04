@@ -133,6 +133,24 @@ export function AdminOrdersPage() {
     if (req.bank) rows.push({ label: 'Банк', value: String(req.bank) });
     if (req.phone) rows.push({ label: 'СБП', value: String(req.phone) });
     if (req.card) rows.push({ label: 'Карта', value: String(req.card) });
+    if (o.number) rows.push({ label: 'Номер', value: `№${o.number}` });
+    if (o.clientIp) rows.push({ label: 'IP клиента', value: String(o.clientIp) });
+    if (o.clientDevice) rows.push({ label: 'Устройство', value: String(o.clientDevice) });
+    if (o.payments?.length) {
+      const st: Record<string, string> = {
+        sent: 'ждём клиента',
+        confirmed: 'подтверждён',
+        proof_requested: 'не пришёл, ждём видео',
+        disputed: 'не пришёл, видео получено',
+        cancelled: 'отменён',
+      };
+      for (const p of o.payments) {
+        rows.push({
+          label: `Платёж №${p.seq}`,
+          value: `${fmtRub(p.amountKopecks)} ₽ · ${st[p.status] || p.status}`,
+        });
+      }
+    }
     if (o.payoutDeadline) rows.push({ label: 'Таймер до', value: fmtDate(o.payoutDeadline) });
     if (o.dispatchedAt) rows.push({ label: 'Направлено', value: fmtDate(o.dispatchedAt) });
     if (o.failReason) rows.push({ label: 'Причина отказа', value: String(o.failReason) });

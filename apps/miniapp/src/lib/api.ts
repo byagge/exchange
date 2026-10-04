@@ -15,6 +15,10 @@ export async function api<T = any>(
   const headers = new Headers(opts.headers || {});
   headers.set('Content-Type', 'application/json');
   if (opts.token) headers.set('Authorization', `Bearer ${opts.token}`);
+  // Платформа Telegram — для определения устройства клиента на сервере
+  const wa = (window as any).Telegram?.WebApp;
+  if (wa?.platform) headers.set('X-Tg-Platform', String(wa.platform));
+  if (wa?.version) headers.set('X-Tg-Version', String(wa.version));
 
   const res = await fetch(`${API_BASE}${path}`, {
     ...opts,

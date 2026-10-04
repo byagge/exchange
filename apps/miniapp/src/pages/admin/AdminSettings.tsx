@@ -87,6 +87,7 @@ export function AdminSettingsPage() {
           fiatReceiveBank: s.fiatReceiveBank,
           fiatReceiveName: s.fiatReceiveName,
           defaultPayoutMinutes: Number(s.defaultPayoutMinutes || 30),
+          ordersGroupId: (s.ordersGroupId || '').trim() || null,
         }),
       });
       setS(updated);
@@ -479,6 +480,23 @@ export function AdminSettingsPage() {
                 </button>
               ))}
             </div>
+
+            <SectionTitle
+              title="Группа операторов"
+              hint="Супергруппа с включёнными темами: на каждую заявку бот создаёт тему. Проще всего — добавить бота админом (право «Управление темами») и отправить в группе /setgroup"
+            />
+            <label className="admin-field">
+              <span className="tiny">ID группы</span>
+              <div className="input-shell">
+                <input
+                  value={s.ordersGroupId ?? ''}
+                  onChange={(e) => setField('ordersGroupId', e.target.value)}
+                  placeholder="-100…"
+                  spellCheck={false}
+                />
+              </div>
+            </label>
+            <StatusPill ok={!!s.ordersGroupId} okText="Группа привязана" badText="Группа не привязана — заявки придут админам в личку" />
 
             <SectionTitle title="Приветствие бота" hint="Текст в главном меню после /start" />
             <textarea

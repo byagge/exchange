@@ -207,6 +207,11 @@ export class AdminService {
       fromAmountMicros: Number(o.fromAmountMicros),
       toAmountKopecks: Number(o.toAmountKopecks),
       feeMicros: Number(o.feeMicros || 0),
+      payoutAmountKopecks:
+        o.payoutAmountKopecks != null ? Number(o.payoutAmountKopecks) : o.payoutAmountKopecks,
+      payments: Array.isArray(o.payments)
+        ? o.payments.map((p: any) => ({ ...p, amountKopecks: Number(p.amountKopecks) }))
+        : undefined,
       user: o.user
         ? {
             ...o.user,
@@ -254,6 +259,7 @@ export class AdminService {
           take: 50,
         },
         referredBy: { select: { id: true, username: true, firstName: true } },
+        sessions: { orderBy: { lastSeenAt: 'desc' }, take: 20 },
       },
     });
     if (!user) throw new NotFoundException('Пользователь не найден');
@@ -592,7 +598,7 @@ export class AdminService {
   async getOrder(id: string) {
     const order = await this.prisma.exchangeOrder.findUnique({
       where: { id },
-      include: { user: true, withdrawal: true },
+      include: { user: true, withdrawal: true, payments: { orderBy: { seq: 'asc' } } },
     });
     if (!order) throw new NotFoundException();
     return this.serializeOrder(order);

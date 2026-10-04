@@ -6,6 +6,7 @@ import { validateTelegramInitData } from '../common/telegram-auth';
 import { UsersService } from '../users/users.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { LedgerService } from '../ledger/ledger.service';
+import type { ClientMeta } from '../common/client-meta';
 
 @Injectable()
 export class AuthService {
@@ -16,13 +17,14 @@ export class AuthService {
     private ledger: LedgerService,
   ) {}
 
-  async telegramLogin(body: unknown) {
+  async telegramLogin(body: unknown, meta?: ClientMeta) {
     const parsed = authTelegramSchema.parse(body);
     const result = validateTelegramInitData(parsed.initData, process.env.BOT_TOKEN || '');
     if (!result.ok) throw new UnauthorizedException(result.error);
 
     const user = await this.users.upsertFromTelegram(result.user, parsed.referralCode);
     await this.ledger.ensureAccounts(user.id);
+    if (meta) await this.users.recordSession(user.id, meta);
 
     const serialized = this.users.serialize(user);
     const token = await this.jwt.signAsync({

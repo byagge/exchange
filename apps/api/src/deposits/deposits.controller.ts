@@ -1,16 +1,27 @@
 import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { DepositsService } from './deposits.service';
+import { ChainScanService } from './chain-scan.service';
 import { CurrentUser, JwtAuthGuard, type JwtPayload } from '../auth/guards';
 
 @Controller('deposits')
 @UseGuards(JwtAuthGuard)
 export class DepositsController {
-  constructor(private deposits: DepositsService) {}
+  constructor(
+    private deposits: DepositsService,
+    private scanner: ChainScanService,
+  ) {}
 
   @Get()
   list(@CurrentUser() user: JwtPayload) {
     return this.deposits.listMine(user.sub);
+  }
+
+  /** Принудительная проверка адресов TON/TRC20 текущего пользователя */
+  @Throttle({ default: { limit: 8, ttl: 60_000 } })
+  @Post('check')
+  check(@CurrentUser() user: JwtPayload) {
+    return this.scanner.checkUser(user.sub);
   }
 
   @Throttle({ default: { limit: 10, ttl: 60_000 } })

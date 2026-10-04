@@ -451,9 +451,9 @@ async function start() {
     }
   }, 60_000);
 
-  setInterval(async () => {
-    await depositsQueue.add('poll_chains', {});
-  }, 45_000);
+  // Сканирование депозитов TRC20/TON переехало в API (ChainScanService) — worker больше
+  // не планирует poll_chains, чтобы не дублировать зачисления.
+  void depositsQueue;
 
   console.log('Worker online');
 }

@@ -11,16 +11,30 @@ import {
 } from '@exchange/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { LedgerService } from '../ledger/ledger.service';
-import { QueueService, QUEUES } from '../queue/queue.service';
 import type { ProofAttachment } from '../admin/uploads';
+import type { ClientMeta } from '../common/client-meta';
+import { TelegramService, escHtml } from '../telegram/telegram.service';
+import { OrderTopicsService, kop } from '../telegram/order-topics.service';
+import { PaymentsService } from './payments.service';
 
 @Injectable()
 export class ExchangeService {
   constructor(
     private prisma: PrismaService,
     private ledger: LedgerService,
-    private queue: QueueService,
+    private tg: TelegramService,
+    private topics: OrderTopicsService,
+    private payments: PaymentsService,
   ) {}
+
+  private orderLabel(o: { number?: number | null; id: string }) {
+    return o.number ? `№${o.number}` : `#${o.id.slice(-6).toUpperCase()}`;
+  }
+
+  private async dmClient(userId: string, text: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (user) await this.tg.sendMessage(user.telegramId, text);
+  }
 
   /** Только USDT → RUB */
   async quote(amountUsdt: number) {
@@ -46,7 +60,7 @@ export class ExchangeService {
     };
   }
 
-  async create(userId: string, body: unknown) {
+  async create(userId: string, body: unknown, meta?: ClientMeta) {
     const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
     if (user.status === 'banned') throw new ForbiddenException('Аккаунт заблокирован');
     if (user.status === 'frozen' || user.withdrawFrozen) {
@@ -70,13 +84,14 @@ export class ExchangeService {
     }
 
     const parsed = createExchangeSchema.parse(body);
-    return this.createSell(userId, parsed, settings);
+    return this.createSell(userId, parsed, settings, meta);
   }
 
   private async createSell(
     userId: string,
     parsed: ReturnType<typeof createExchangeSchema.parse>,
     settings: Awaited<ReturnType<PrismaService['settings']['findUniqueOrThrow']>>,
+    meta?: ClientMeta,
   ) {
     const amount =
       typeof parsed.amountUsdt === 'number'
@@ -110,6 +125,9 @@ export class ExchangeService {
         rate: quote.rate,
         feeMicros: BigInt(quote.feeMicros),
         method: 'fiat',
+        clientIp: meta?.ip ?? null,
+        clientDevice: meta?.device ?? null,
+        clientUserAgent: meta?.userAgent ?? null,
         requisites: {
           type: req.type,
           phone: req.type === 'sbp' ? req.phone : undefined,
@@ -133,12 +151,8 @@ export class ExchangeService {
       data: { status: 'awaiting_payout' },
     });
 
-    await this.queue.enqueue(QUEUES.notify, 'admin_payout_needed', {
-      orderId: order.id,
-      userId,
-      amountKopecks: quote.toAmountKopecks,
-      direction: 'sell',
-    });
+    // Тема в группе операторов + карточка с кнопками (не блокирует ответ клиенту)
+    void this.topics.openForOrder(order.id);
 
     return this.prisma.exchangeOrder.findUniqueOrThrow({ where: { id: order.id } });
   }
@@ -169,10 +183,13 @@ export class ExchangeService {
       order.id,
     );
 
-    return this.prisma.exchangeOrder.update({
+    const cancelled = await this.prisma.exchangeOrder.update({
       where: { id: orderId },
       data: { status: 'cancelled' },
     });
+    await this.topics.post(orderId, '🚫 <b>Клиент отменил заявку.</b> Средства разблокированы.');
+    await this.topics.close(orderId);
+    return cancelled;
   }
 
   /**
@@ -211,38 +228,21 @@ export class ExchangeService {
       payoutKopecks = Math.round(rub * 100);
     }
 
-    const deadline = new Date(Date.now() + minutes * 60_000);
+    if (parsed.note?.trim()) {
+      await this.prisma.exchangeOrder.update({
+        where: { id: orderId },
+        data: { adminNote: parsed.note.trim() },
+      });
+    }
 
-    const updated = await this.prisma.exchangeOrder.update({
-      where: { id: orderId },
-      data: {
-        status: 'processing',
-        payoutAmountKopecks: BigInt(payoutKopecks),
-        payoutDeadline: deadline,
-        dispatchedAt: new Date(),
-        adminNote: parsed.note?.trim() || order.adminNote,
-      },
-    });
-
-    await this.prisma.auditLog.create({
-      data: {
-        adminId,
-        action: 'dispatch_order',
-        entityType: 'ExchangeOrder',
-        entityId: orderId,
-        meta: { payoutKopecks, minutes, deadline: deadline.toISOString() },
-      },
-    });
-
-    await this.queue.enqueue(QUEUES.notify, 'payout_dispatched', {
-      orderId,
-      userId: order.userId,
+    // Единый путь с кнопкой «Отправить платёж» в теме: платёж + сообщение клиенту в личку
+    await this.payments.sendPayment(orderId, {
       amountKopecks: payoutKopecks,
-      deadline: deadline.toISOString(),
       minutes,
+      actor: adminId,
+      allowOverpay: true,
     });
-
-    return updated;
+    return this.prisma.exchangeOrder.findUniqueOrThrow({ where: { id: orderId } });
   }
 
   async fulfillByAdmin(
@@ -296,7 +296,7 @@ export class ExchangeService {
       },
     });
 
-    return this.prisma.exchangeOrder.update({
+    const done = await this.prisma.exchangeOrder.update({
       where: { id: order.id },
       data: {
         status: 'completed',
@@ -306,6 +306,14 @@ export class ExchangeService {
         completedAt: new Date(),
       },
     });
+
+    await this.dmClient(
+      order.userId,
+      `✅ <b>Заявка ${this.orderLabel(done)} завершена.</b>\nВыплата: <b>${kop(done.payoutAmountKopecks ?? done.toAmountKopecks)} ₽</b>. Спасибо, что пользуетесь сервисом!`,
+    );
+    await this.topics.post(order.id, '✅ <b>Заявка завершена.</b> Тема закрыта.');
+    await this.topics.close(order.id);
+    return done;
   }
 
   private async applyLoyaltyAndReferral(order: {
@@ -370,10 +378,22 @@ export class ExchangeService {
         meta: { reason },
       },
     });
-    return this.prisma.exchangeOrder.update({
+    const failed = await this.prisma.exchangeOrder.update({
       where: { id: orderId },
       data: { status: 'failed', failReason: reason },
     });
+    // Невыплаченные платежи больше не актуальны
+    await this.prisma.orderPayment.updateMany({
+      where: { orderId, status: { in: ['sent', 'proof_requested', 'disputed'] } },
+      data: { status: 'cancelled' },
+    });
+    await this.dmClient(
+      order.userId,
+      `❌ <b>Заявка ${this.orderLabel(failed)} отменена.</b>\n${reason ? `Причина: ${escHtml(reason)}\n` : ''}Заблокированные USDT возвращены на ваш баланс.`,
+    );
+    await this.topics.post(orderId, `🚫 <b>Заявка отменена.</b> ${reason ? escHtml(reason) : ''}`.trim());
+    await this.topics.close(orderId);
+    return failed;
   }
 
   /** Клиент прикрепляет видео после истечения таймера */
@@ -409,11 +429,15 @@ export class ExchangeService {
       },
     });
 
-    await this.queue.enqueue(QUEUES.notify, 'client_proof_uploaded', {
+    const base = (process.env.API_URL || process.env.WEBAPP_URL || '').replace(/\/$/, '');
+    const links = files
+      .map((f) => `• <a href="${escHtml(f.url.startsWith('http') ? f.url : base + f.url)}">${escHtml(f.name)}</a>`)
+      .join('\n');
+    await this.topics.post(
       orderId,
-      userId,
-      filesCount: files.length,
-    });
+      `📎 <b>Клиент прикрепил файлы</b> (Mini App) — ${files.length} шт.:\n${links}`,
+      { withKeyboard: true },
+    );
 
     return updated;
   }

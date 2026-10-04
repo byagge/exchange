@@ -15,6 +15,7 @@ import { AdminModule } from './admin/admin.module';
 import { HealthController } from './health.controller';
 import { QueueModule } from './queue/queue.module';
 import { JobsModule } from './jobs/jobs.module';
+import { TelegramModule } from './telegram/telegram.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { JobsModule } from './jobs/jobs.module';
     ThrottlerModule.forRoot([{ ttl: 60_000, limit: 60 }]),
     PrismaModule,
     QueueModule,
+    TelegramModule,
     JobsModule,
     AuthModule,
     UsersModule,

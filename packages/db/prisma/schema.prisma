@@ -42,6 +42,17 @@ enum OrderStatus {
   failed
 }
 
+enum PaymentStatus {
+  /// Платёж направлен клиенту, ждём подтверждения «Пришло / Не пришло»
+  sent
+  confirmed
+  /// Клиент нажал «Не пришло» — ждём видео
+  proof_requested
+  /// Видео получено, оператор разбирается
+  disputed
+  cancelled
+}
+
 enum WithdrawalMethod {
   cryptobot
   onchain
@@ -99,6 +110,10 @@ model User {
   isAdmin         Boolean    @default(false)
   /** Принял правила бота (/start) */
   rulesAcceptedAt DateTime?
+  /** Последний IP / устройство из Mini App */
+  lastIp          String?
+  lastDevice      String?
+  lastSeenAt      DateTime?
   createdAt       DateTime   @default(now())
   updatedAt       DateTime   @updatedAt
 
@@ -109,9 +124,25 @@ model User {
   withdrawals   Withdrawal[]
   referralEarns ReferralEarning[] @relation("Earner")
   referralFrom  ReferralEarning[] @relation("Source")
+  sessions      ClientSession[]
 
   @@index([status])
   @@index([createdAt])
+}
+
+/// История входов клиента в Mini App: IP + устройство
+model ClientSession {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ip        String?
+  device    String?
+  userAgent String?
+  platform  String?
+  createdAt DateTime @default(now())
+  lastSeenAt DateTime @default(now())
+
+  @@index([userId, lastSeenAt])
 }
 
 model WalletAddress {
@@ -216,11 +247,51 @@ model ExchangeOrder {
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
 
+  /** Короткий сквозной номер заявки (для оператора) */
+  number          Int?        @unique
+  /** Тема в группе операторов */
+  topicId         Int?
+  topicChatId     String?
+  /** Сообщение-карточка заявки в теме (редактируется по ходу) */
+  topicMessageId  Int?
+  /** IP / устройство клиента в момент создания заявки */
+  clientIp        String?
+  clientDevice    String?
+  clientUserAgent String?
+
   withdrawal Withdrawal?
+  payments   OrderPayment[]
 
   @@index([userId, createdAt])
   @@index([status])
   @@index([payoutDeadline])
+}
+
+/// Платёж оператора клиенту (по заявке может быть несколько: основной + дополнительные)
+model OrderPayment {
+  id              String        @id @default(cuid())
+  orderId         String
+  order           ExchangeOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  seq             Int
+  amountKopecks   BigInt
+  status          PaymentStatus @default(sent)
+  timerMinutes    Int
+  deadline        DateTime
+  /** Telegram id оператора, который направил платёж */
+  sentBy          String?
+  /** Сообщение с платежом в личке клиента (обновляется таймером) */
+  clientChatId    String?
+  clientMessageId Int?
+  expiredNotified Boolean       @default(false)
+  confirmedAt     DateTime?
+  disputedAt      DateTime?
+  /** [{type, fileId, at}] — видео/файлы, присланные клиентом боту */
+  proofFiles      Json?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([orderId])
+  @@index([status, deadline])
 }
 
 model Withdrawal {
@@ -286,6 +357,8 @@ model Settings {
   fiatReceiveName      String   @default("Exchange")
   /** Таймер выплаты по умолчанию (минуты), когда оператор направляет заявку */
   defaultPayoutMinutes Int      @default(30)
+  /** Супергруппа с темами, куда бот создаёт тему на каждую заявку (/setgroup) */
+  ordersGroupId        String?
   updatedAt            DateTime @updatedAt
 }
 

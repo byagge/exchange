@@ -5,6 +5,7 @@ import {
   ArrowLeft,
   Copy,
   FlaskConical,
+  RefreshCw,
   Link2,
   Send,
   Wallet as WalletIcon,
@@ -35,6 +36,7 @@ export function WalletPage() {
   const [balance, setBalance] = useState(0);
   const [allowSimulate, setAllowSimulate] = useState(false);
   const [cryptoBotOk, setCryptoBotOk] = useState(false);
+  const [checking, setChecking] = useState(false);
 
   useEffect(() => {
     if (!token) return;
@@ -53,6 +55,48 @@ export function WalletPage() {
         setCryptoBotOk(false);
       });
   }, [token]);
+
+  async function checkDeposits(silent = false) {
+    if (!token) return;
+    if (!silent) {
+      setChecking(true);
+      setErr(null);
+    }
+    try {
+      const r = await api<{
+        credited: Array<{ network: string; amountUsdt: number }>;
+        errors: string[];
+      }>('/api/deposits/check', { method: 'POST', token });
+      if (r.credited.length) {
+        const sum = r.credited.reduce((a, c) => a + c.amountUsdt, 0);
+        haptic('success');
+        setMsg(`Зачислено ${sum.toLocaleString('ru-RU', { maximumFractionDigits: 6 })} USDT`);
+        await refreshProfile();
+        const b = await api<{ available: number }>('/api/balance', { token });
+        setBalance(b.available);
+      } else if (!silent) {
+        setMsg(
+          r.errors.length
+            ? 'Сеть временно не отвечает — повторите через минуту'
+            : 'Новых поступлений пока нет. Транзакции видны после подтверждения сети (1–3 мин).',
+        );
+        setTimeout(() => setMsg(null), 4000);
+      }
+    } catch (e: any) {
+      if (!silent) setErr(e.message);
+    } finally {
+      if (!silent) setChecking(false);
+    }
+  }
+
+  // Пока открыта вкладка пополнения по адресу — сами проверяем зачисления
+  useEffect(() => {
+    if (!token || tab !== 'deposit' || mode !== 'address') return;
+    void checkDeposits(true);
+    const id = setInterval(() => void checkDeposits(true), 20_000);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, tab, mode]);
 
   const current = useMemo(
     () => wallets.find((w) => w.network === network),
@@ -297,6 +341,17 @@ export function WalletPage() {
                   <button type="button" className="cta" onClick={() => copy(current.address)}>
                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
                       <Copy size={16} /> Копировать адрес
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    className="cta secondary"
+                    disabled={checking}
+                    onClick={() => void checkDeposits(false)}
+                  >
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                      <RefreshCw size={16} className={checking ? 'spin' : undefined} />
+                      {checking ? 'Проверяем сеть…' : 'Проверить пополнение'}
                     </span>
                   </button>
                   {allowSimulate && (

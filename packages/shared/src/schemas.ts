@@ -184,6 +184,7 @@ export const adminSettingsSchema = z.object({
   fiatReceiveBank: z.string().optional(),
   fiatReceiveName: z.string().optional(),
   defaultPayoutMinutes: z.number().int().min(1).max(24 * 60).optional(),
+  ordersGroupId: z.string().trim().max(32).nullable().optional(),
 });
 
 export const fulfillOrderSchema = z.object({
