@@ -2,6 +2,7 @@ import dotenv from 'dotenv';
 import path from 'path';
 import { Bot, InlineKeyboard, Keyboard, GrammyError, HttpError, Context } from 'grammy';
 import { prisma } from '@exchange/db';
+import { hydrateVideoWait, registerOperatorHandlers } from './operator';
 
 dotenv.config({ path: path.resolve(__dirname, '../../../.env') });
 dotenv.config();
@@ -463,6 +464,10 @@ async function main() {
   }
 
   const bot = new Bot(token);
+
+  // Operator forum + payout confirm (must be early for message relay)
+  registerOperatorHandlers(bot);
+  await hydrateVideoWait().catch(() => undefined);
 
   bot.command('start', async (ctx) => {
     const payload = (ctx.match?.toString() || '').trim();

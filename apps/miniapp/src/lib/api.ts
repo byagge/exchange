@@ -16,6 +16,18 @@ export async function api<T = any>(
   headers.set('Content-Type', 'application/json');
   if (opts.token) headers.set('Authorization', `Bearer ${opts.token}`);
 
+  try {
+    const tg = (window as any).Telegram?.WebApp;
+    const platform = tg?.platform || '';
+    const version = tg?.version || '';
+    if (platform) headers.set('X-Tg-Platform', String(platform));
+    if (platform || version) {
+      headers.set('X-Device', [platform, version && `TG ${version}`].filter(Boolean).join(' / '));
+    }
+  } catch {
+    /* noop */
+  }
+
   const res = await fetch(`${API_BASE}${path}`, {
     ...opts,
     headers,

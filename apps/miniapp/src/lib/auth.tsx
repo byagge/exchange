@@ -93,16 +93,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     (async () => {
       try {
+        // Always re-auth / refresh so isAdmin from server is fresh
         if (token) {
-          // Background refresh — UI already visible
-          await refreshProfile();
+          try {
+            await refreshProfile();
+          } catch {
+            await login();
+          }
         } else {
           await login();
         }
       } catch {
         localStorage.removeItem('ex_token');
         localStorage.removeItem(USER_CACHE_KEY);
-        if (!cancelled) setToken(null);
+        if (!cancelled) {
+          setToken(null);
+          setUser(null);
+        }
         try {
           await login();
         } catch (err: any) {

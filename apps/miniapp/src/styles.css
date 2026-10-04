@@ -48,63 +48,19 @@ a {
   background: var(--bg);
 }
 
-.page-viewport.keep-alive {
-  display: flex;
-  flex-direction: column;
-}
-
-.tab-pane,
-.stack-pane,
 .page-slide {
   position: absolute;
   inset: 0;
   overflow-x: hidden;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
+  will-change: transform, opacity;
   background:
     radial-gradient(1200px 600px at 50% -10%, rgba(10, 132, 255, 0.14), transparent 55%),
     radial-gradient(800px 400px at 80% 20%, rgba(255, 255, 255, 0.03), transparent 50%),
     var(--bg);
+  backface-visibility: hidden;
   -webkit-font-smoothing: antialiased;
-}
-
-.tab-pane {
-  visibility: hidden;
-  pointer-events: none;
-  z-index: 0;
-  /* keep offscreen paint cheap but preserve state */
-  content-visibility: auto;
-}
-
-.tab-pane.is-active {
-  visibility: visible;
-  pointer-events: auto;
-  z-index: 1;
-  content-visibility: visible;
-}
-
-.stack-pane.is-active {
-  z-index: 2;
-  animation: stack-in 0.22s cubic-bezier(0.32, 0.72, 0, 1);
-}
-
-@keyframes stack-in {
-  from {
-    transform: translate3d(100%, 0, 0);
-  }
-  to {
-    transform: translate3d(0, 0, 0);
-  }
-}
-
-.boot-screen {
-  min-height: 100%;
-  display: grid;
-  place-content: center;
-  gap: 10px;
-  text-align: center;
-  padding: 24px;
-  background: var(--bg);
 }
 
 .page {

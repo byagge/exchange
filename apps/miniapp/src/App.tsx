@@ -1,55 +1,34 @@
-import { lazy, Suspense } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { AppShell } from './components/AppShell';
 import { useAuth } from './lib/auth';
+import { SplashPage } from './pages/Splash';
+import { HomePage } from './pages/Home';
+import { ExchangePage } from './pages/Exchange';
+import { HistoryPage } from './pages/History';
+import { ProfilePage } from './pages/Profile';
 import { WalletPage } from './pages/Wallet';
+import { AdminShell } from './pages/admin/AdminShell';
+import { AdminDashboardPage } from './pages/admin/AdminDashboard';
+import { AdminOrdersPage } from './pages/admin/AdminOrders';
+import { AdminUsersPage } from './pages/admin/AdminUsers';
+import { AdminMorePage } from './pages/admin/AdminMore';
+import { AdminSettingsPage } from './pages/admin/AdminSettings';
+import { AdminDepositsPage } from './pages/admin/AdminDeposits';
+import { AdminWithdrawalsPage } from './pages/admin/AdminWithdrawals';
+import { AdminWalletsPage } from './pages/admin/AdminWallets';
+import { AdminBroadcastPage } from './pages/admin/AdminBroadcast';
 
-const AdminShell = lazy(() =>
-  import('./pages/admin/AdminShell').then((m) => ({ default: m.AdminShell })),
-);
-const AdminDashboardPage = lazy(() =>
-  import('./pages/admin/AdminDashboard').then((m) => ({ default: m.AdminDashboardPage })),
-);
-const AdminOrdersPage = lazy(() =>
-  import('./pages/admin/AdminOrders').then((m) => ({ default: m.AdminOrdersPage })),
-);
-const AdminUsersPage = lazy(() =>
-  import('./pages/admin/AdminUsers').then((m) => ({ default: m.AdminUsersPage })),
-);
-const AdminMorePage = lazy(() =>
-  import('./pages/admin/AdminMore').then((m) => ({ default: m.AdminMorePage })),
-);
-const AdminSettingsPage = lazy(() =>
-  import('./pages/admin/AdminSettings').then((m) => ({ default: m.AdminSettingsPage })),
-);
-const AdminDepositsPage = lazy(() =>
-  import('./pages/admin/AdminDeposits').then((m) => ({ default: m.AdminDepositsPage })),
-);
-const AdminWithdrawalsPage = lazy(() =>
-  import('./pages/admin/AdminWithdrawals').then((m) => ({ default: m.AdminWithdrawalsPage })),
-);
-const AdminWalletsPage = lazy(() =>
-  import('./pages/admin/AdminWallets').then((m) => ({ default: m.AdminWalletsPage })),
-);
-const AdminBroadcastPage = lazy(() =>
-  import('./pages/admin/AdminBroadcast').then((m) => ({ default: m.AdminBroadcastPage })),
-);
-
-function Empty() {
-  return null;
+function HomeGate() {
+  const seen = sessionStorage.getItem('ex_splash') === '1';
+  if (!seen) return <Navigate to="/splash" replace />;
+  return <HomePage />;
 }
 
 function AdminRoutes() {
   return (
     <Route path="admin">
       <Route path="login" element={<Navigate to="/admin" replace />} />
-      <Route
-        element={
-          <Suspense fallback={<div className="boot-screen"><p className="muted">Загрузка…</p></div>}>
-            <AdminShell />
-          </Suspense>
-        }
-      >
+      <Route element={<AdminShell />}>
         <Route index element={<AdminDashboardPage />} />
         <Route path="orders" element={<AdminOrdersPage />} />
         <Route path="users" element={<AdminUsersPage />} />
@@ -66,44 +45,67 @@ function AdminRoutes() {
 }
 
 export default function App() {
-  const { loading, error, token } = useAuth();
+  const { loading, error } = useAuth();
 
-  if (loading && !token) {
+  if (loading) {
     return (
-      <div className="boot-screen">
-        <div className="brand">
-          Ex<span>change</span>
-        </div>
-        <p className="muted">Загрузка…</p>
-      </div>
+      <Routes>
+        {AdminRoutes()}
+        <Route
+          path="*"
+          element={
+            <div className="splash">
+              <div className="splash-center">
+                <div className="brand">
+                  Ex<span>change</span>
+                </div>
+                <p className="muted">Загрузка…</p>
+              </div>
+            </div>
+          }
+        />
+      </Routes>
     );
   }
 
-  if (error && !token) {
+  if (error) {
     return (
-      <div className="boot-screen">
-        <div className="brand">
-          Ex<span>change</span>
-        </div>
-        <p className="error-text">{error}</p>
-        <button className="cta" style={{ marginTop: 16 }} type="button" onClick={() => window.location.reload()}>
-          Обновить
-        </button>
-      </div>
+      <Routes>
+        {AdminRoutes()}
+        <Route
+          path="*"
+          element={
+            <div className="splash">
+              <div className="splash-center">
+                <div className="brand">
+                  Ex<span>change</span>
+                </div>
+                <p className="error-text">{error}</p>
+                <p className="tiny">
+                  Dev-вход: <code>?dev=1001</code> (админ по Telegram ID из .env)
+                </p>
+                <button className="cta" style={{ marginTop: 16 }} onClick={() => window.location.reload()}>
+                  Обновить
+                </button>
+              </div>
+            </div>
+          }
+        />
+      </Routes>
     );
   }
 
   return (
     <Routes>
+      <Route path="/splash" element={<SplashPage />} />
       {AdminRoutes()}
       <Route element={<AppShell />}>
-        <Route index element={<Empty />} />
-        <Route path="exchange" element={<Empty />} />
-        <Route path="history" element={<Empty />} />
-        <Route path="profile" element={<Empty />} />
+        <Route index element={<HomeGate />} />
+        <Route path="exchange" element={<ExchangePage />} />
+        <Route path="history" element={<HistoryPage />} />
+        <Route path="profile" element={<ProfilePage />} />
         <Route path="wallet" element={<WalletPage />} />
       </Route>
-      <Route path="splash" element={<Navigate to="/" replace />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

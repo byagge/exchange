@@ -5,6 +5,7 @@ import { usdtToMicros } from '@exchange/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { LedgerService } from '../ledger/ledger.service';
 import { QueueService, QUEUES } from '../queue/queue.service';
+import { OperatorService } from '../telegram/operator.service';
 
 function mocksAllowed() {
   return process.env.ALLOW_MOCK_PAYOUTS === 'true';
@@ -73,6 +74,7 @@ export class JobsService implements OnModuleInit {
     private prisma: PrismaService,
     private ledger: LedgerService,
     private queue: QueueService,
+    private operator: OperatorService,
   ) {}
 
   onModuleInit() {
@@ -462,12 +464,31 @@ export class JobsService implements OnModuleInit {
       for (const id of admins) await send(id, text);
     }
 
-    if (jobName === 'admin_payout_needed' || jobName === 'payout_dispatched') {
-      this.logger.log(`[notify:${jobName}] ${JSON.stringify(data)}`);
+    if (jobName === 'admin_payout_needed') {
+      this.logger.log(`[notify:admin_payout_needed] ${d.orderId}`);
+      const opened = await this.operator.openOrderTopic(d.orderId);
+      if (!opened) {
+        const card = await this.operator.formatOrderCard(d.orderId);
+        await this.operator.pingAdmins(
+          card || `Новая заявка ${d.orderId} (укажите ADMIN_FORUM_CHAT_ID /bindforum)`,
+        );
+      }
+    }
+
+    if (jobName === 'payout_dispatched') {
+      this.logger.log(`[notify:payout_dispatched] ${d.orderId}`);
+      await this.operator.notifyClientPayout(d.orderId);
+      await this.operator.postToOrderTopic(
+        d.orderId,
+        `📤 Платёж отправлен клиенту: <b>${(Number(d.amountKopecks) / 100).toFixed(2)} ₽</b>\n` +
+          `⏳ Таймер: ${d.minutes} мин`,
+      );
+      await this.operator.updateTopicTitle(d.orderId, '🟡');
     }
 
     if (jobName === 'client_proof_uploaded') {
       const text = `📎 Клиент прикрепил видео к заявке ${d.orderId}`;
+      await this.operator.postToOrderTopic(d.orderId, text);
       for (const id of admins) await send(id, text);
     }
   }

@@ -15,6 +15,8 @@ import { AdminModule } from './admin/admin.module';
 import { HealthController } from './health.controller';
 import { QueueModule } from './queue/queue.module';
 import { JobsModule } from './jobs/jobs.module';
+import { OperatorModule } from './telegram/operator.module';
+import { InternalModule } from './internal/internal.module';
 
 @Module({
   imports: [
@@ -22,6 +24,7 @@ import { JobsModule } from './jobs/jobs.module';
     ThrottlerModule.forRoot([{ ttl: 60_000, limit: 60 }]),
     PrismaModule,
     QueueModule,
+    OperatorModule,
     JobsModule,
     AuthModule,
     UsersModule,
@@ -32,6 +35,7 @@ import { JobsModule } from './jobs/jobs.module';
     WithdrawalsModule,
     SettingsModule,
     AdminModule,
+    InternalModule,
   ],
   controllers: [HealthController],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],

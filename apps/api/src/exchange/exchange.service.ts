@@ -46,7 +46,11 @@ export class ExchangeService {
     };
   }
 
-  async create(userId: string, body: unknown) {
+  async create(
+    userId: string,
+    body: unknown,
+    clientMeta?: { ip?: string | null; device?: string | null; userAgent?: string | null },
+  ) {
     const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
     if (user.status === 'banned') throw new ForbiddenException('Аккаунт заблокирован');
     if (user.status === 'frozen' || user.withdrawFrozen) {
@@ -70,13 +74,14 @@ export class ExchangeService {
     }
 
     const parsed = createExchangeSchema.parse(body);
-    return this.createSell(userId, parsed, settings);
+    return this.createSell(userId, parsed, settings, clientMeta);
   }
 
   private async createSell(
     userId: string,
     parsed: ReturnType<typeof createExchangeSchema.parse>,
     settings: Awaited<ReturnType<PrismaService['settings']['findUniqueOrThrow']>>,
+    clientMeta?: { ip?: string | null; device?: string | null; userAgent?: string | null },
   ) {
     const amount =
       typeof parsed.amountUsdt === 'number'
@@ -110,6 +115,9 @@ export class ExchangeService {
         rate: quote.rate,
         feeMicros: BigInt(quote.feeMicros),
         method: 'fiat',
+        clientIp: clientMeta?.ip || undefined,
+        clientDevice: clientMeta?.device || undefined,
+        clientUserAgent: clientMeta?.userAgent || undefined,
         requisites: {
           type: req.type,
           phone: req.type === 'sbp' ? req.phone : undefined,

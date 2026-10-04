@@ -99,6 +99,10 @@ model User {
   isAdmin         Boolean    @default(false)
   /** Принял правила бота (/start) */
   rulesAcceptedAt DateTime?
+  lastIp          String?
+  lastUserAgent   String?
+  lastDevice      String?
+  lastSeenAt      DateTime?
   createdAt       DateTime   @default(now())
   updatedAt       DateTime   @updatedAt
 
@@ -213,6 +217,16 @@ model ExchangeOrder {
   payoutDeadline  DateTime?
   dispatchedAt    DateTime?
   completedAt     DateTime?
+  /** Telegram forum topic for operators */
+  adminForumChatId String?
+  adminTopicId     Int?
+  adminPanelMsgId  Int?
+  /** pending | arrived | not_arrived */
+  payoutConfirm    String?
+  awaitingClientVideo Boolean @default(false)
+  clientIp         String?
+  clientDevice     String?
+  clientUserAgent  String?
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
 
@@ -221,6 +235,7 @@ model ExchangeOrder {
   @@index([userId, createdAt])
   @@index([status])
   @@index([payoutDeadline])
+  @@index([adminTopicId])
 }
 
 model Withdrawal {
@@ -286,6 +301,8 @@ model Settings {
   fiatReceiveName      String   @default("Exchange")
   /** Таймер выплаты по умолчанию (минуты), когда оператор направляет заявку */
   defaultPayoutMinutes Int      @default(30)
+  /** Telegram forum-группа операторов (chat id) */
+  adminForumChatId     String?
   updatedAt            DateTime @updatedAt
 }
 
