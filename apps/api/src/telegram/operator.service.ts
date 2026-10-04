@@ -120,9 +120,14 @@ export class OperatorService {
     const card = req.card || '—';
     const dest = req.type === 'card' ? `Карта: <code>${card}</code>` : `Телефон: <code>${phone}</code>`;
 
+    const settings = await this.prisma.settings.findUnique({ where: { id: 1 } });
+    const refPct = settings?.referralPercent ?? 0;
+    const saleLine = `${usdt.replace(/\s/g, '')} × ${order.rate}`;
+
     return (
-      `💬 <b>Новая заявка №${shortId(order.id)}</b>\n\n` +
-      `Статус: <b>${order.status}</b>\n` +
+      `💬 <b>Новая заявка №-${shortId(order.id)}</b>\n\n` +
+      `✅ Сумма к обработке (баланс клиента).\n` +
+      `Статус: <b>${order.status}</b>\n\n` +
       `🪙 Сумма: <b>${usdt} USDT</b>\n` +
       `💰 Курс: <b>${order.rate} RUB/$</b>\n` +
       `🔄 К выплате: <b>${rub} RUB</b>\n` +
@@ -130,14 +135,16 @@ export class OperatorService {
       `🪪 ${dest}\n` +
       `🪪 Получатель: <b>${req.fio || '—'}</b>\n` +
       `📌 Банк: <b>${req.bank || '—'}</b>\n\n` +
-      `🔄 Выплата клиенту: <b>${payout} ₽</b>\n\n` +
+      `🔄 Выплата клиенту: <b>${payout} ₽</b>\n` +
+      `📌 Продажа USDT: ${saleLine}\n\n` +
       `👤 Клиент: ${nick}\n` +
       `🆔 TG ID: <code>${u.telegramId}</code>\n` +
       (order.clientIp ? `🌐 IP: <code>${order.clientIp}</code>\n` : '') +
       (order.clientDevice ? `📱 Устройство: <code>${order.clientDevice}</code>\n` : '') +
       (u.lastIp && u.lastIp !== order.clientIp ? `🌐 Last IP: <code>${u.lastIp}</code>\n` : '') +
       `\n📊 Реферал: ${refNick}` +
-      (ref ? `\n📌 ID реферера: <code>${ref.telegramId}</code>` : '')
+      (ref ? `\n📌 ID реферера: <code>${ref.telegramId}</code>` : '') +
+      `\n🔗 Реферальное вознаграждение (${refPct}%): считается при завершении`
     );
   }
 
@@ -179,10 +186,18 @@ export class OperatorService {
     }
 
     const text = await this.formatOrderCard(orderId);
+    const kb = this.adminKeyboard(orderId);
+
+    // Control panel (top) + card with same buttons (as on screenshots)
+    await tgSendMessage(forumId, '🎛 <b>Панель оператора</b>', {
+      message_thread_id: topic.message_thread_id,
+      reply_markup: kb,
+    });
+
     const msg = text
       ? await tgSendMessage(forumId, text, {
           message_thread_id: topic.message_thread_id,
-          reply_markup: this.adminKeyboard(orderId),
+          reply_markup: kb,
         })
       : null;
 

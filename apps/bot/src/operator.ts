@@ -28,10 +28,16 @@ function isAdmin(ctx: Context) {
 
 export function registerOperatorHandlers(bot: Bot) {
   bot.command('bindforum', async (ctx) => {
-    if (!isAdmin(ctx)) return;
+    if (!isAdmin(ctx)) {
+      await ctx.reply('Только админ.');
+      return;
+    }
     const chat = ctx.chat;
     if (!chat || (chat.type !== 'group' && chat.type !== 'supergroup')) {
-      await ctx.reply('Команду нужно отправить в forum-группе операторов.');
+      await ctx.reply(
+        'Открой <b>forum-группу</b> операторов (Topics включены) и напиши там /bindforum',
+        { parse_mode: 'HTML' },
+      );
       return;
     }
     try {
@@ -39,9 +45,62 @@ export function registerOperatorHandlers(bot: Bot) {
         method: 'POST',
         body: { chatId: String(chat.id) },
       });
-      await ctx.reply(`✅ Forum привязан: <code>${chat.id}</code>`, { parse_mode: 'HTML' });
+      await ctx.reply(
+        `✅ Группа привязана\nID: <code>${chat.id}</code>\n\n` +
+          `Новые заявки будут создавать темы здесь.`,
+        { parse_mode: 'HTML' },
+      );
     } catch (e: any) {
       await ctx.reply(`Ошибка: ${e.message}`);
+    }
+  });
+
+  bot.command('ops', async (ctx) => {
+    if (!isAdmin(ctx)) return;
+    try {
+      const status = await internalApi<{ forumChatId?: string | null }>('/internal/forum/status').catch(
+        () => ({ forumChatId: null }),
+      );
+      const forum = (status as any).forumChatId || 'не привязана';
+      await ctx.reply(
+        `🛠 <b>Операторка</b>\n\n` +
+          `Forum: <code>${forum}</code>\n` +
+          `API: <code>${process.env.API_URL || 'http://127.0.0.1:3010'}</code>\n\n` +
+          `1) Создай супергруппу → включи Topics\n` +
+          `2) Добавь @${ctx.me.username} админом (право управлять темами)\n` +
+          `3) В группе: /bindforum\n` +
+          `4) Создай тестовую заявку в миниаппе`,
+        { parse_mode: 'HTML' },
+      );
+    } catch (e: any) {
+      await ctx.reply(`⚠️ ${e.message}`);
+    }
+  });
+
+  // Auto-bind when bot is added as admin to a forum group
+  bot.on('my_chat_member', async (ctx) => {
+    try {
+      const upd = ctx.myChatMember;
+      const chat = upd.chat;
+      const status = upd.new_chat_member.status;
+      if (chat.type !== 'supergroup' && chat.type !== 'group') return;
+      if (status !== 'administrator' && status !== 'member') return;
+      const fromId = String(upd.from.id);
+      const admins = new Set(
+        (process.env.ADMIN_TELEGRAM_IDS || '').split(',').map((s) => s.trim()).filter(Boolean),
+      );
+      if (!admins.has(fromId)) return;
+      await internalApi('/internal/forum/bind', {
+        method: 'POST',
+        body: { chatId: String(chat.id) },
+      });
+      await ctx.api.sendMessage(
+        chat.id,
+        `✅ Exchange привязал эту группу как операторскую.\n` +
+          `Проверка: /ops в личке с ботом.`,
+      );
+    } catch {
+      /* ignore */
     }
   });
 

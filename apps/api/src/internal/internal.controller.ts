@@ -89,4 +89,10 @@ export class InternalController {
   bind(@Body() body: { chatId: string }) {
     return this.operator.bindForumChat(String(body.chatId));
   }
+
+  @Get('forum/status')
+  async forumStatus() {
+    const forumChatId = await this.operator.resolveForumChatId();
+    return { forumChatId, ok: !!forumChatId };
+  }
 }
