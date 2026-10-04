@@ -15,8 +15,8 @@ const pendingRef = new Map<number, string>();
 const broadcastDraft = new Map<number, string>();
 
 /**
- * Premium emoji pack (HTML <tg-emoji>).
- * Fallback unicode inside the tag for clients without custom emoji.
+ * Premium emoji pack (custom emoji ids).
+ * Fallback unicode inside the tag for clients without support.
  */
 const E = {
   menu: { id: '5377336227533969892', f: '☰' },
@@ -31,41 +31,47 @@ const E = {
   info: { id: '5910994954968113783', f: 'ℹ️' },
   megaphone: { id: '5909124470940901643', f: '📣' },
   check: { id: '5911055144639799125', f: '✅' },
+  check2: { id: '5911473599008480053', f: '✅' },
   cart: { id: '5911362634233421746', f: '🛒' },
   trash: { id: '5911143453462372194', f: '🗑' },
-  clock: { id: '5911276936750964150', f: '⏱' },
+  clock: { id: '5911276936750964150', f: '⏳' },
   briefcase: { id: '5909275524940702226', f: '💼' },
   search: { id: '5911028421353285215', f: '🔍' },
   pin: { id: '5911464351943892212', f: '📌' },
   user: { id: '5908952869817557105', f: '👤' },
   users: { id: '5908795012589560198', f: '👥' },
+  terminal: { id: '5911143788469821823', f: '💻' },
   wallet: { id: '5908947788871246223', f: '👛' },
   at: { id: '5911352098678644390', f: '@' },
   crown: { id: '5911453258043368257', f: '👑' },
+  cube: { id: '5911148804991624295', f: '🟦' },
   link: { id: '5909164332532376529', f: '🔗' },
+  hammer: { id: '5909243381405459597', f: '🔨' },
   gift: { id: '5911358979216251585', f: '🎁' },
-  chart: { id: '591110355751159614', f: '📈' },
-  home: { id: '5908975658914030178', f: '🏠' },
+  game: { id: '5909070998598065571', f: '🎮' },
+  house: { id: '5908975658914030178', f: '🏠' },
   robot: { id: '5911350127288655523', f: '🤖' },
+  download: { id: '5910996634300326111', f: '⬇️' },
   star: { id: '5911080141349461495', f: '⭐' },
   layers: { id: '5911230542514233531', f: '📚' },
-  arrow: { id: '5909164014704796217', f: '↗️' },
+  arrow: { id: '5909164014704796217', f: '↗' },
   down: { id: '5911001882750360915', f: '⬇️' },
-  flask: { id: '5910995388759811013', f: '🧪' },
   bell: { id: '5911258945132962452', f: '🔔' },
   ton: { id: '5911239046549478950', f: '💎' },
-  usdt: { id: '5911473113677176791', f: '₮' },
+  usdt: { id: '5911473113677176791', f: '💵' },
   swap: { id: '5909224668232952203', f: '💱' },
   tron: { id: '5911054161092288272', f: '🔴' },
-  ok: { id: '5911473599008480053', f: '✅' },
   question: { id: '5911175201860625958', f: '❓' },
+  excl: { id: '5911111563330201293', f: '❗' },
   dollar: { id: '5910984870384902405', f: '$' },
-  ruble: { id: '5911388322432820088', f: '₽' },
+  rub: { id: '5911388322432820088', f: '₽' },
+  percent: { id: '5911535691350679507', f: '%' },
+  plus: { id: '5908947269180203065', f: '+' },
+  minus: { id: '5911397221605056306', f: '−' },
   cross: { id: '5911501675209694593', f: '❌' },
-  support: { id: '5377650268987465369', f: '🆘' },
-  wave: { id: '5911484439505936397', f: '👋' },
+  support: { id: '5911111563330201293', f: '🆘' },
   doc: { id: '5911245291431929370', f: '📄' },
-  back: { id: '5911001882750360915', f: '⬅️' },
+  wave: { id: '5911484439505936397', f: '👋' },
 } as const;
 
 type EKey = keyof typeof E;
@@ -77,6 +83,37 @@ function pe(key: EKey): string {
 
 function stripPremium(html: string) {
   return html.replace(/<tg-emoji emoji-id="[^"]*">([^<]*)<\/tg-emoji>/g, '$1');
+}
+
+function fmtMoney(micros: number | bigint): string {
+  const n = Number(micros) / 1e6;
+  return n.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function fmtRate(rate: string | number): string {
+  const n = Number(rate);
+  if (!Number.isFinite(n)) return String(rate);
+  return n.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function orderStatusRu(status: string): string {
+  const map: Record<string, string> = {
+    draft: 'Черновик',
+    awaiting_funds: 'Ожидание средств',
+    locked: 'Заблокирована',
+    processing: 'В обработке',
+    awaiting_payout: 'Ожидание выплаты',
+    completed: 'Завершена',
+    cancelled: 'Отменена',
+    rejected: 'Отклонена',
+    failed: 'Ошибка',
+    expired: 'Истекла',
+  };
+  return map[status] || status;
+}
+
+function shortOrderId(id: string): string {
+  return id.slice(-8).toUpperCase();
 }
 
 async function replyHtml(
@@ -126,28 +163,6 @@ function isAdminTg(ctx: Context) {
   const id = ctx.from?.id?.toString();
   return !!id && adminIds().has(id);
 }
-
-function moneyUsd(micros: number | bigint) {
-  const n = Number(micros) / 1e6;
-  return n.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-
-function moneyRub(kopecks: number | bigint) {
-  const n = Number(kopecks) / 100;
-  return n.toLocaleString('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-
-const ORDER_STATUS: Record<string, string> = {
-  draft: 'Черновик',
-  awaiting_funds: 'Ожидает средств',
-  locked: 'Заблокирована',
-  processing: 'В обработке',
-  awaiting_payout: 'Ожидает выплаты',
-  completed: 'Завершена',
-  cancelled: 'Отменена',
-  failed: 'Ошибка',
-  disputed: 'Спор',
-};
 
 async function settings() {
   try {
@@ -214,193 +229,50 @@ async function ensureUser(ctx: Context) {
 }
 
 function rulesKeyboard() {
-  return new InlineKeyboard().text(`${E.check.f} Принимаю правила`, 'rules:accept');
+  return new InlineKeyboard()
+    .text(`${E.check.f} Принимаю правила`, 'rules:accept')
+    .icon(E.check.id);
 }
 
-/** Blue primary WebApp button */
-function openAppInlineRow(): Record<string, unknown>[] {
-  return [
-    {
-      text: `${E.monitor.f} Открыть приложение`,
-      web_app: { url: webappUrl },
-      style: 'primary',
-      icon_custom_emoji_id: E.monitor.id,
-    },
-  ];
+function openAppButton(kb: InlineKeyboard, label = `${E.house.f} Открыть приложение`) {
+  kb.webApp(label, webappUrl).icon(E.house.id).primary();
+  return kb;
 }
 
 function mainMenuKeyboard(admin: boolean) {
-  const rows: Record<string, unknown>[][] = [
-    openAppInlineRow(),
-    [
-      { text: `${E.user.f} Профиль`, callback_data: 'menu:profile', icon_custom_emoji_id: E.user.id },
-      {
-        text: `${E.support.f} Поддержка`,
-        callback_data: 'menu:support',
-        icon_custom_emoji_id: E.support.id,
-      },
-    ],
-  ];
-  if (admin) {
-    rows.push([
-      {
-        text: `${E.megaphone.f} Админ · рассылка`,
-        callback_data: 'admin:broadcast',
-        icon_custom_emoji_id: E.megaphone.id,
-      },
-    ]);
-  }
   const kb = new InlineKeyboard();
-  (kb as any).inline_keyboard = rows;
+  openAppButton(kb);
+  kb.row()
+    .text(`${E.user.f} Профиль`, 'menu:profile')
+    .icon(E.user.id)
+    .text(`${E.support.f} Поддержка`, 'menu:support')
+    .icon(E.support.id);
+  if (admin) {
+    kb.row().text(`${E.megaphone.f} Админ · рассылка`, 'admin:broadcast').icon(E.megaphone.id);
+  }
   return kb;
 }
 
 function replyMenuKeyboard(admin: boolean) {
-  const rows: Record<string, unknown>[][] = [
-    [
-      {
-        text: `${E.monitor.f} Открыть приложение`,
-        web_app: { url: webappUrl },
-        icon_custom_emoji_id: E.monitor.id,
-      },
-    ],
-    [
-      { text: `${E.user.f} Профиль`, icon_custom_emoji_id: E.user.id },
-      { text: `${E.support.f} Поддержка`, icon_custom_emoji_id: E.support.id },
-    ],
-  ];
-  if (admin) {
-    rows.push([{ text: `${E.megaphone.f} Рассылка`, icon_custom_emoji_id: E.megaphone.id }]);
-  }
-  const kb = new Keyboard();
-  (kb as any).keyboard = rows;
+  const kb = new Keyboard()
+    .webApp(`${E.house.f} Открыть приложение`, webappUrl)
+    .icon(E.house.id)
+    .primary()
+    .row()
+    .text(`${E.user.f} Профиль`)
+    .icon(E.user.id)
+    .text(`${E.support.f} Поддержка`)
+    .icon(E.support.id);
+  if (admin) kb.row().text(`${E.megaphone.f} Рассылка`).icon(E.megaphone.id);
   return kb.resized().persistent();
 }
 
 function profileActionsKeyboard() {
   return new InlineKeyboard()
-    .text(`${E.chart.f} Курс`, 'menu:rate')
-    .text(`${E.layers.f} Заявки`, 'menu:orders');
-}
-
-async function profileText(user: {
-  id: string;
-  username: string | null;
-  firstName: string | null;
-  telegramId: bigint;
-  tradeCount: number;
-}) {
-  const [available, referral] = await Promise.all([
-    prisma.ledgerAccount.findUnique({
-      where: { userId_kind: { userId: user.id, kind: 'available' } },
-    }),
-    prisma.ledgerAccount.findUnique({
-      where: { userId_kind: { userId: user.id, kind: 'referral' } },
-    }),
-  ]);
-  const nick = user.username ? `@${user.username}` : user.firstName || '—';
-  const deals = user.tradeCount ?? 0;
-  return (
-    `${pe('question')} <b>Информация</b>\n` +
-    `├ Никнейм: ${nick}\n` +
-    `├ ID: <code>${user.telegramId.toString()}</code>\n` +
-    `╰ Кол-во сделок: ${deals}\n\n` +
-    `${pe('question')} <b>Финансы</b>\n` +
-    `├ Баланс: ${pe('dollar')} ${moneyUsd(available?.balance || 0)}\n` +
-    `╰ Реферальный баланс: ${pe('dollar')} ${moneyUsd(referral?.balance || 0)}`
-  );
-}
-
-async function showProfile(
-  ctx: Context,
-  user: {
-    id: string;
-    username: string | null;
-    firstName: string | null;
-    telegramId: bigint;
-    tradeCount: number;
-  },
-  edit = false,
-) {
-  const text = await profileText(user);
-  const markup = profileActionsKeyboard();
-  if (edit) await editHtml(ctx, text, { reply_markup: markup });
-  else await replyHtml(ctx, text, { reply_markup: markup });
-}
-
-async function showRate(ctx: Context, edit = false) {
-  const s = await settings();
-  const rate = s?.usdtRubRate || process.env.DEFAULT_USDT_RUB_RATE || '98.01';
-  const text =
-    `${pe('chart')} <b>Курс</b>\n\n` +
-    `${pe('usdt')} USDT ${pe('swap')} ${pe('ruble')} RUB\n` +
-    `1 USDT = <b>${rate}</b> ₽`;
-  const kb = new InlineKeyboard().text(`${E.back.f} Назад`, 'menu:profile');
-  if (edit) await editHtml(ctx, text, { reply_markup: kb });
-  else await replyHtml(ctx, text, { reply_markup: kb });
-}
-
-async function showOrdersList(ctx: Context, userId: string, edit = false) {
-  const orders = await prisma.exchangeOrder.findMany({
-    where: { userId },
-    orderBy: { createdAt: 'desc' },
-    take: 20,
-  });
-  const kb = new InlineKeyboard();
-  if (!orders.length) {
-    const text = `${pe('layers')} <b>Заявки</b>\n\nЗаявок пока нет.`;
-    kb.text(`${E.back.f} Назад`, 'menu:profile');
-    if (edit) await editHtml(ctx, text, { reply_markup: kb });
-    else await replyHtml(ctx, text, { reply_markup: kb });
-    return;
-  }
-  for (const o of orders) {
-    const usdt = moneyUsd(o.fromAmountMicros);
-    const st = ORDER_STATUS[o.status] || o.status;
-    const short = o.id.slice(-6).toUpperCase();
-    kb.text(`${E.swap.f} #${short} · ${usdt} · ${st}`, `order:${o.id}`).row();
-  }
-  kb.text(`${E.back.f} Назад`, 'menu:profile');
-  const text = `${pe('layers')} <b>Заявки</b>\n\nВыберите заявку:`;
-  if (edit) await editHtml(ctx, text, { reply_markup: kb });
-  else await replyHtml(ctx, text, { reply_markup: kb });
-}
-
-async function showOrderDetail(ctx: Context, orderId: string, userId: string) {
-  const order = await prisma.exchangeOrder.findFirst({
-    where: { id: orderId, userId },
-  });
-  if (!order) {
-    await editHtml(ctx, `${pe('warn')} Заявка не найдена.`, {
-      reply_markup: new InlineKeyboard().text(`${E.back.f} Назад`, 'menu:orders'),
-    });
-    return;
-  }
-  const req = (order.requisites || {}) as Record<string, unknown>;
-  const bank = req.bank ? String(req.bank) : '—';
-  const fio = req.fio ? String(req.fio) : '—';
-  const card = req.card || req.phone || req.requisite || '—';
-  const text =
-    `${pe('swap')} <b>Заявка #${order.id.slice(-6).toUpperCase()}</b>\n\n` +
-    `${pe('pin')} Статус: <b>${ORDER_STATUS[order.status] || order.status}</b>\n` +
-    `${pe('usdt')} Сумма: <b>${moneyUsd(order.fromAmountMicros)}</b> USDT\n` +
-    `${pe('ruble')} К получению: <b>${moneyRub(order.payoutAmountKopecks ?? order.toAmountKopecks)}</b> ₽\n` +
-    `${pe('chart')} Курс: <b>${order.rate}</b>\n` +
-    `${pe('briefcase')} Банк: ${bank}\n` +
-    `${pe('user')} ФИО: ${fio}\n` +
-    `${pe('at')} Реквизиты: <code>${String(card)}</code>\n` +
-    `${pe('clock')} Создана: ${order.createdAt.toLocaleString('ru-RU')}`;
-  const kb = new InlineKeyboard().text(`${E.back.f} Назад`, 'menu:orders');
-  await editHtml(ctx, text, { reply_markup: kb });
-}
-
-async function showSupport(ctx: Context) {
-  await replyHtml(
-    ctx,
-    `${pe('support')} <b>Поддержка</b>\n\n` +
-      `По всем вопросам обращайтесь к оператору.\n` +
-      `Укажите номер заявки при обращении.`,
-  );
+    .text(`${E.swap.f} Курс`, 'menu:rate')
+    .icon(E.swap.id)
+    .text(`${E.folder.f} Заявки`, 'menu:orders')
+    .icon(E.folder.id);
 }
 
 async function showMainMenu(ctx: Context) {
@@ -408,18 +280,13 @@ async function showMainMenu(ctx: Context) {
   const welcome = s?.welcomeText || 'Добро пожаловать в Exchange.';
   const admin = isAdminTg(ctx);
 
-  // 1) menu emoji first + reply keyboard
-  try {
-    await ctx.reply(pe('menu'), {
-      parse_mode: 'HTML',
-      reply_markup: replyMenuKeyboard(admin),
-    });
-  } catch {
-    await ctx.reply(E.menu.f, { reply_markup: replyMenuKeyboard(admin) });
-  }
+  // 1) Premium menu emoji + reply keyboard
+  await replyHtml(ctx, pe('menu'), {
+    reply_markup: replyMenuKeyboard(admin),
+  });
 
-  // 2) then main menu with inline buttons
-  await replyHtml(ctx, `${pe('home')} <b>${welcome}</b>`, {
+  // 2) Main menu with inline buttons
+  await replyHtml(ctx, `${pe('star')} <b>${welcome}</b>`, {
     reply_markup: mainMenuKeyboard(admin),
   });
 }
@@ -436,6 +303,143 @@ async function showRules(ctx: Context) {
       `${pe('doc')} <b>Правила сервиса</b>\n\n` +
       `${rules}`,
     { reply_markup: rulesKeyboard() },
+  );
+}
+
+async function showProfile(ctx: Context, edit = false) {
+  const user = await ensureUser(ctx);
+  if (!user) return;
+
+  const [available, referral] = await Promise.all([
+    prisma.ledgerAccount.findUnique({
+      where: { userId_kind: { userId: user.id, kind: 'available' } },
+    }),
+    prisma.ledgerAccount.findUnique({
+      where: { userId_kind: { userId: user.id, kind: 'referral' } },
+    }),
+  ]);
+
+  const nick = user.username ? `@${user.username}` : user.firstName || '—';
+  const deals = user.tradeCount ?? 0;
+  const bal = fmtMoney(available?.balance || 0);
+  const refBal = fmtMoney(referral?.balance || 0);
+
+  const text =
+    `${pe('question')} <b>Информация</b>\n` +
+    `├ Никнейм: ${nick}\n` +
+    `├ ID: <code>${user.telegramId.toString()}</code>\n` +
+    `╰ Кол-во сделок: ${deals}\n\n` +
+    `${pe('question')} <b>Финансы</b>\n` +
+    `├ Баланс: ${pe('dollar')} ${bal}\n` +
+    `╰ Реферальный баланс: ${pe('dollar')} ${refBal}`;
+
+  if (edit) {
+    await editHtml(ctx, text, { reply_markup: profileActionsKeyboard() });
+  } else {
+    await replyHtml(ctx, text, { reply_markup: profileActionsKeyboard() });
+  }
+}
+
+async function showRate(ctx: Context, edit = false) {
+  const s = await settings();
+  const rate = fmtRate(s?.usdtRubRate || process.env.DEFAULT_USDT_RUB_RATE || '98.01');
+  const text =
+    `${pe('swap')} <b>Курс обмена</b>\n\n` +
+    `${pe('usdt')} 1 USDT = ${pe('rub')} <b>${rate}</b>`;
+
+  const kb = new InlineKeyboard()
+    .text(`${E.down.f} Назад`, 'menu:profile')
+    .icon(E.down.id);
+
+  if (edit) await editHtml(ctx, text, { reply_markup: kb });
+  else await replyHtml(ctx, text, { reply_markup: kb });
+}
+
+async function showOrdersList(ctx: Context, edit = false) {
+  const user = await ensureUser(ctx);
+  if (!user) return;
+
+  const orders = await prisma.exchangeOrder.findMany({
+    where: { userId: user.id },
+    orderBy: { createdAt: 'desc' },
+    take: 20,
+  });
+
+  if (!orders.length) {
+    const empty =
+      `${pe('folder')} <b>Заявки</b>\n\n` + `${pe('info')} У вас пока нет заявок.`;
+    const kb = new InlineKeyboard()
+      .text(`${E.down.f} Назад`, 'menu:profile')
+      .icon(E.down.id);
+    if (edit) await editHtml(ctx, empty, { reply_markup: kb });
+    else await replyHtml(ctx, empty, { reply_markup: kb });
+    return;
+  }
+
+  const kb = new InlineKeyboard();
+  for (const o of orders) {
+    const usdt = fmtMoney(o.fromAmountMicros);
+    const label = `${shortOrderId(o.id)} · ${usdt} USDT · ${orderStatusRu(o.status)}`;
+    kb.text(label, `order:${o.id}`).row();
+  }
+  kb.text(`${E.down.f} Назад`, 'menu:profile').icon(E.down.id);
+
+  const text = `${pe('folder')} <b>Ваши заявки</b>\n\n${pe('pin')} Выберите заявку:`;
+  if (edit) await editHtml(ctx, text, { reply_markup: kb });
+  else await replyHtml(ctx, text, { reply_markup: kb });
+}
+
+async function showOrderDetail(ctx: Context, orderId: string) {
+  const user = await ensureUser(ctx);
+  if (!user) return;
+
+  const order = await prisma.exchangeOrder.findFirst({
+    where: { id: orderId, userId: user.id },
+  });
+  if (!order) {
+    await editHtml(
+      ctx,
+      `${pe('warn')} Заявка не найдена.`,
+      {
+        reply_markup: new InlineKeyboard()
+          .text(`${E.down.f} Назад`, 'menu:orders')
+          .icon(E.down.id),
+      },
+    );
+    return;
+  }
+
+  const usdt = fmtMoney(order.fromAmountMicros);
+  const rub = (Number(order.toAmountKopecks) / 100).toLocaleString('ru-RU', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+  const created = order.createdAt.toLocaleString('ru-RU');
+
+  const text =
+    `${pe('folder')} <b>Заявка #${shortOrderId(order.id)}</b>\n\n` +
+    `${pe('info')} Статус: <b>${orderStatusRu(order.status)}</b>\n` +
+    `${pe('usdt')} Отдаёте: <b>${usdt} USDT</b>\n` +
+    `${pe('rub')} Получаете: <b>${rub} ₽</b>\n` +
+    `${pe('swap')} Курс: <b>${fmtRate(order.rate)}</b>\n` +
+    `${pe('clock')} Создана: ${created}`;
+
+  await editHtml(ctx, text, {
+    reply_markup: new InlineKeyboard()
+      .text(`${E.down.f} Назад`, 'menu:orders')
+      .icon(E.down.id),
+  });
+}
+
+async function showSupport(ctx: Context) {
+  const s = await settings();
+  const support = s?.supportUrl ? `\n\n${pe('link')} ${s.supportUrl}` : '';
+  await replyHtml(
+    ctx,
+    `${pe('support')} <b>Поддержка</b>\n\n` +
+      `По всем вопросам обращайтесь к оператору.\n` +
+      `Укажите номер заявки при обращении.` +
+      support,
   );
 }
 
@@ -486,12 +490,7 @@ async function main() {
 
   bot.callbackQuery('menu:profile', async (ctx) => {
     await ctx.answerCallbackQuery();
-    const user = await ensureUser(ctx);
-    if (!user) return;
-    const text = await profileText(user);
-    const markup = profileActionsKeyboard();
-    const edited = await editHtml(ctx, text, { reply_markup: markup });
-    if (!edited) await replyHtml(ctx, text, { reply_markup: markup });
+    await showProfile(ctx, true);
   });
 
   bot.callbackQuery('menu:rate', async (ctx) => {
@@ -501,16 +500,13 @@ async function main() {
 
   bot.callbackQuery('menu:orders', async (ctx) => {
     await ctx.answerCallbackQuery();
-    const user = await ensureUser(ctx);
-    if (!user) return;
-    await showOrdersList(ctx, user.id, true);
+    await showOrdersList(ctx, true);
   });
 
   bot.callbackQuery(/^order:(.+)$/, async (ctx) => {
     await ctx.answerCallbackQuery();
-    const user = await ensureUser(ctx);
-    if (!user) return;
-    await showOrderDetail(ctx, ctx.match![1], user.id);
+    const orderId = ctx.match![1];
+    await showOrderDetail(ctx, orderId);
   });
 
   bot.callbackQuery('menu:support', async (ctx) => {
@@ -564,7 +560,7 @@ async function main() {
     await replyHtml(
       ctx,
       `${pe('check')} <b>Рассылка завершена</b>\n` +
-        `${pe('ok')} Доставлено: <b>${ok}</b>\n` +
+        `${pe('star')} Доставлено: <b>${ok}</b>\n` +
         `${pe('warn')} Ошибок: <b>${fail}</b>`,
     );
   });
@@ -584,9 +580,9 @@ async function main() {
   });
 
   bot.command('app', async (ctx) => {
-    await replyHtml(ctx, `${pe('monitor')} Exchange`, {
-      reply_markup: mainMenuKeyboard(isAdminTg(ctx)),
-    });
+    const kb = new InlineKeyboard();
+    openAppButton(kb);
+    await replyHtml(ctx, `${pe('house')} Exchange`, { reply_markup: kb });
   });
 
   bot.on('message:text', async (ctx) => {
@@ -603,7 +599,9 @@ async function main() {
           {
             reply_markup: new InlineKeyboard()
               .text(`${E.check.f} Отправить`, 'admin:bc:confirm')
-              .text(`${E.cross.f} Отмена`, 'admin:bc:cancel'),
+              .icon(E.check.id)
+              .text(`${E.cross.f} Отмена`, 'admin:bc:cancel')
+              .icon(E.cross.id),
           },
         );
         return;
@@ -617,13 +615,13 @@ async function main() {
     }
 
     if (text.includes('Открыть приложение')) {
-      await replyHtml(ctx, `${pe('monitor')} Exchange`, {
-        reply_markup: mainMenuKeyboard(isAdminTg(ctx)),
-      });
+      const kb = new InlineKeyboard();
+      openAppButton(kb);
+      await replyHtml(ctx, `${pe('house')} Exchange`, { reply_markup: kb });
       return;
     }
     if (text.includes('Профиль') || text.includes('Баланс')) {
-      await showProfile(ctx, user, false);
+      await showProfile(ctx, false);
       return;
     }
     if (text.includes('Поддержка')) {
